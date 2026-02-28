@@ -1,0 +1,32 @@
+{
+  "name": "mwbe",
+  "version": "1.0.0",
+  "description": "Generic Fastify starter project",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "nodemon --watch src --ext js --exec node src/server.js",
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "fastify",
+    "api",
+    "nodejs"
+  ],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "latest",
+    "@fastify/cors": "latest",
+    "@fastify/helmet": "latest",
+    "@fastify/sensible": "latest",
+    "dotenv": "latest",
+    "fastify": "latest"
+  },
+  "devDependencies": {
+    "nodemon": "latest"
+  }
+}
