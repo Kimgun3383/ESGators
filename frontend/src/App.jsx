@@ -1,5 +1,11 @@
+/**
+ * Application routing for the IoT environmental monitoring and ESG scoring dashboard
+ * 
+ * Last Edit: Nicholas Sardinia, 3/1/2026
+ */
+
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
-import { AuthProvider } from "./auth/AuthContext"
+import { AuthProvider } from "./components/AuthContext"
 import AppShell from "./components/AppShell"
 import ProfileShell from "./components/ProfileShell"
 import ProtectedRoute from "./components/ProtectedRoute"

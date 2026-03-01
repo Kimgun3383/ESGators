@@ -1,3 +1,9 @@
+/**
+ * Firebase driver script. Can make connections to firebasae and test config. Initializes firebase connection.
+ * 
+ * Last Edit: Nicholas Sardinia, 3/1/2026
+ */
+
 import { initializeApp } from "firebase/app"
 import { getAuth } from "firebase/auth"
 
@@ -20,6 +26,21 @@ const firebaseConfigError = isFirebaseConfigured
   ? ""
   : `Missing Firebase config: ${missingFirebaseEnvKeys.join(", ")}`
 
+let hasWarnedAboutFirebaseConfig = false
+
+function notifyFirebaseConfigError() {
+  if (isFirebaseConfigured || hasWarnedAboutFirebaseConfig) {
+    return
+  }
+
+  hasWarnedAboutFirebaseConfig = true
+  console.error(firebaseConfigError)
+
+  if (typeof window !== "undefined") {
+    window.alert("Firebase is not configured. Authentication is disabled.")
+  }
+}
+
 let auth = null
 
 if (isFirebaseConfigured) {
@@ -36,4 +57,4 @@ if (isFirebaseConfigured) {
   auth = getAuth(app)
 }
 
-export { auth, firebaseConfigError, isFirebaseConfigured, missingFirebaseEnvKeys }
+export { auth, isFirebaseConfigured, notifyFirebaseConfigError }

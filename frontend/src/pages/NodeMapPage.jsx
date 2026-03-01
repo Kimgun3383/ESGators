@@ -1,7 +1,13 @@
+/**
+ * Node config page.
+ * 
+ * TODO: Add node configuration settings, public / private node access, etc.
+ * 
+ * Last Edit: Nicholas Sardinia, 3/1/2026
+ */
 import { useEffect, useState } from "react"
-import { useAuth } from "../auth/AuthContext"
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://srprojmwbe.fly.dev"
+import { useAuth } from "../components/AuthContext"
+import { API_BASE_URL } from "../lib/api"
 
 function NodeMapPage() {
   const { user } = useAuth()

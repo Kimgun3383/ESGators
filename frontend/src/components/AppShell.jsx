@@ -1,7 +1,12 @@
+/**
+ * Shell for user dashboard. Wraps content with sidebar navigation tools for extensibility.
+ * 
+ * Last Edit: Nicholas Sardinia, 3/1/2026
+ */
 import { useState } from "react"
 import { signOut } from "firebase/auth"
 import { NavLink, Outlet } from "react-router-dom"
-import { useAuth } from "../auth/AuthContext"
+import { useAuth } from "../components/AuthContext"
 import { auth } from "../lib/firebase"
 
 function AppShell() {

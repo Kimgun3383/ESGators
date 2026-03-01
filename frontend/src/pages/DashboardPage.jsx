@@ -1,11 +1,19 @@
+/**
+ * Dashboard Page
+ * 
+ * TODO: Replace with Grafana dashbaord.
+ * 
+ * Last Edit: Nicholas Sardinia, 3/1/2026
+ */
 import axios from "axios"
 import { useEffect, useState } from "react"
+import { API_BASE_URL } from "../lib/api"
 
 function DashboardPage() {
   const [data, setData] = useState(null)
 
   useEffect(() => {
-    axios.get("http://localhost:3000/data")
+    axios.get(`${API_BASE_URL}/data`)
       .then(res => setData(res.data))
       .catch(err => console.error(err))
   }, [])
