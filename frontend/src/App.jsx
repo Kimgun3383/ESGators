@@ -19,6 +19,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<SplashPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/auth" element={<AuthPage />} />
           <Route
             path="/app"
@@ -28,9 +29,8 @@ function App() {
               </ProtectedRoute>
             )}
           >
-            <Route path="dashboard" element={<DashboardPage />} />
             <Route path="node-map" element={<NodeMapPage />} />
-            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route index element={<Navigate to="/dashboard" replace />} />
           </Route>
           <Route
             path="/profile"
