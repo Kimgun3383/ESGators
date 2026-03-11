@@ -1,11 +1,4 @@
-require("dotenv").config()
-const express = require("express")
-const cors = require("cors")
-const path = require("node:path")
-const axios = require("axios")
-const protobuf = require("protobufjs")
-const snappy = require("snappy")
-const promClient = require("prom-client")
+const { startServer } = require("./app")
 
 const { createSupabaseFromEnv } = require("./supabase")
 
@@ -530,3 +523,13 @@ module.exports = {
     storeSensorReading,
     calculateEsgEnvironmentScore,
 }
+const runtime = startServer()
+
+function shutdown() {
+    runtime.close()
+        .then(() => process.exit(0))
+        .catch(() => process.exit(1))
+}
+
+process.on("SIGINT", shutdown)
+process.on("SIGTERM", shutdown)
