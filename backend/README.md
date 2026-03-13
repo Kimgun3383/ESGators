@@ -21,6 +21,8 @@ cp .env.example .env
 - `GRAFANA_USERNAME`
 - `GRAFANA_API_KEY`
 - `GRAFANA_PUSH_URL`
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
 
 4. Run server:
 
@@ -33,6 +35,37 @@ npm run dev
 - `POST /iot/dummy`
 - `POST /iot/data`
 - `GET /iot/metrics`
+- `GET /iot/export/day`
+- `GET /iot/export/week`
+- `GET /iot/export/month`
+
+### Sensor export
+
+`POST /iot/data` stores sensor samples in Supabase table `sensor_readings`.
+
+Assumed table shape:
+
+```sql
+create table sensor_readings (
+  id uuid primary key default gen_random_uuid(),
+  sensor_id text not null,
+  metric_type text not null,
+  value double precision not null,
+  recorded_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+```
+
+CSV download examples:
+
+```bash
+curl -L "http://localhost:5000/iot/export/day" -o sensor-readings-day.csv
+curl -L "http://localhost:5000/iot/export/week?sensor_id=sensor-a" -o sensor-readings-week.csv
+curl -L "http://localhost:5000/iot/export/month?metric_type=temperature" -o sensor-readings-month.csv
+```
+
+If Supabase has no matching rows yet, the export API returns fallback `th` sample data
+(`th-01`, `th-02` with `temperature` and `humidity`) so frontend download testing can proceed.
 
 ### Quick dummy test
 
