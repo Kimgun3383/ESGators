@@ -21,8 +21,6 @@ function DashboardPage() {
   return (
     <section className="workspace-content">
       <p className="page-kicker">Overview</p>
-      <h1 className="page-title">ESGators Dashboard</h1>
-      <h3 className="page-subtitle">Realtime IoT Environmental Data</h3>
       <div className="data-card">
         <p className="data-card-label">Live Payload</p>
         <pre className="data-json">

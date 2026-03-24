@@ -6,6 +6,7 @@
 
 import { initializeApp } from "firebase/app"
 import { getAuth } from "firebase/auth"
+import { getDatabase } from "firebase/database"
 
 const requiredFirebaseEnvKeys = [
   "VITE_FIREBASE_API_KEY",
@@ -42,8 +43,13 @@ function notifyFirebaseConfigError() {
 }
 
 let auth = null
+let database = null
 
 if (isFirebaseConfigured) {
+  const realtimeDatabaseUrl =
+    import.meta.env.VITE_FIREBASE_DATABASE_URL ||
+    `https://${import.meta.env.VITE_FIREBASE_PROJECT_ID}-default-rtdb.firebaseio.com`
+
   const firebaseConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
     authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -51,10 +57,12 @@ if (isFirebaseConfigured) {
     storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
     messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
     appId: import.meta.env.VITE_FIREBASE_APP_ID,
+    databaseURL: realtimeDatabaseUrl,
   }
 
   const app = initializeApp(firebaseConfig)
   auth = getAuth(app)
+  database = getDatabase(app)
 }
 
-export { auth, isFirebaseConfigured, notifyFirebaseConfigError }
+export { auth, database, isFirebaseConfigured, notifyFirebaseConfigError }

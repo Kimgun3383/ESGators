@@ -70,6 +70,7 @@ Open:
 - `http://localhost:3000/`
 - `http://localhost:3000/health`
 - `http://localhost:3000/users`
+- `http://localhost:3000/docs`
 
 ## 4. Configure Supabase
 
@@ -111,6 +112,7 @@ create table if not exists public.users (
   - `@fastify/sensible` (helper errors/utilities)
   - `@fastify/helmet` (secure HTTP headers)
   - `@fastify/cors` (cross-origin browser access)
+  - Swagger/OpenAPI docs at `/docs`
   - Supabase plugin (`src/plugins/supabase.js`) that decorates `app.supabase`
 
 ### `src/routes/root.js`
@@ -129,6 +131,18 @@ create table if not exists public.users (
 - `npm run dev`: run with autoreload.
 - `npm start`: run normally (production-style startup).
 - `npm test`: placeholder for Node test runner.
+
+## Swagger Docs
+
+Swagger UI is available at:
+
+- `http://localhost:3000/docs`
+
+Raw OpenAPI JSON is available at:
+
+- `http://localhost:3000/documentation/json`
+
+If you deploy behind a public host, set `PUBLIC_API_BASE_URL` in `.env` so the generated server URL in Swagger matches the deployed API origin.
 
 ## Docker
 
@@ -179,6 +193,31 @@ fly apps create <your-app-name>
 ```bash
 fly secrets set SUPABASE_URL=https://YOUR_PROJECT_ID.supabase.co SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY
 ```
+
+4. Set Firebase secrets for hosted provisioning:
+
+Option A, preferred on Fly.io, store the service account fields as separate secrets:
+
+```bash
+fly secrets set \
+  FIREBASE_PROJECT_ID=your-firebase-project-id \
+  FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your-project-id.iam.gserviceaccount.com \
+  FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+```
+
+Optional if you use Firebase Realtime Database:
+
+```bash
+fly secrets set FIREBASE_DATABASE_URL=https://your-project-id-default-rtdb.firebaseio.com
+```
+
+Option B, if you prefer, store the full JSON as one secret:
+
+```bash
+fly secrets set FIREBASE_SERVICE_ACCOUNT_JSON='{"type":"service_account","project_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n","client_email":"..."}'
+```
+
+The backend will now load Firebase credentials from env first, then fall back to `firebaseServiceKeys.json` for local development.
 
 ### Deploy
 

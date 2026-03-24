@@ -5,100 +5,39 @@
  * 
  * Last Edit: Nicholas Sardinia, 3/1/2026
  */
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useAuth } from "../components/AuthContext"
+import useOwnedNodes from "../hooks/useOwnedNodes"
 import { API_BASE_URL } from "../lib/api"
+
+function formatRawDeviceData(telemetry) {
+  if (!telemetry) {
+    return "Waiting for telemetry"
+  }
+
+  return JSON.stringify(telemetry)
+}
 
 function NodeMapPage() {
   const { user } = useAuth()
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [createdSecret, setCreatedSecret] = useState(null)
+  const [searchQuery, setSearchQuery] = useState("")
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [submitting, setSubmitting] = useState(false)
-  const [loadingNodes, setLoadingNodes] = useState(false)
-  const [error, setError] = useState("")
-  const [createdNodes, setCreatedNodes] = useState([])
+  const { createdNodes, error, loadingNodes, setError, syncOwner, reloadNodes } = useOwnedNodes(user)
 
-  const syncOwner = async () => {
-    const ownerResponse = await fetch(`${API_BASE_URL}/users`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        email: user.email,
-        name: user.displayName?.trim() || user.email.split("@")[0],
-        firebaseUid: user.uid,
-      }),
-    })
-
-    const ownerPayload = await ownerResponse.json().catch(() => ({}))
-
-    if (!ownerResponse.ok || !ownerPayload.user?.firebase_uid) {
-      throw new Error(ownerPayload.message || "Failed to sync node owner")
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase()
+  const filteredNodes = createdNodes.filter((node) => {
+    if (!normalizedSearchQuery) {
+      return true
     }
 
-    return ownerPayload.user
-  }
-
-  const loadOwnedNodes = async (ownerFirebaseUid) => {
-    setLoadingNodes(true)
-
-    try {
-      const params = new URLSearchParams({ ownerUid: ownerFirebaseUid })
-      const response = await fetch(`${API_BASE_URL}/devices/owned?${params.toString()}`)
-      const payload = await response.json().catch(() => ({}))
-
-      if (!response.ok) {
-        throw new Error(payload.message || "Failed to load nodes")
-      }
-
-      setCreatedNodes(
-        (payload.devices || []).map((device) => ({
-          id: device.deviceId,
-          name: device.name,
-          description: device.description,
-        }))
-      )
-    } catch (requestError) {
-      setError(requestError.message || "Failed to load nodes")
-    } finally {
-      setLoadingNodes(false)
-    }
-  }
-
-  useEffect(() => {
-    if (!user?.uid || !user.email) {
-      setCreatedNodes([])
-      return
-    }
-
-    let ignore = false
-
-    const run = async () => {
-      setError("")
-
-      try {
-        const owner = await syncOwner()
-
-        if (!ignore) {
-          await loadOwnedNodes(owner.firebase_uid)
-        }
-      } catch (requestError) {
-        if (!ignore) {
-          setError(requestError.message || "Failed to load nodes")
-          setLoadingNodes(false)
-        }
-      }
-    }
-
-    run()
-
-    return () => {
-      ignore = true
-    }
-  }, [user])
+    return [node.name, node.description, node.id].some((value) =>
+      String(value || "").toLowerCase().includes(normalizedSearchQuery)
+    )
+  })
 
   const handleOpenForm = () => {
     setError("")
@@ -153,7 +92,7 @@ function NodeMapPage() {
         throw new Error(payload.message || "Failed to create node")
       }
 
-      await loadOwnedNodes(owner.firebase_uid)
+      await reloadNodes()
       setCreatedSecret({
         id: payload.deviceId,
         secret: payload.deviceSecret,
@@ -169,35 +108,80 @@ function NodeMapPage() {
 
   return (
     <section className="workspace-content node-map-page">
+      <p className="page-kicker">Node Map</p>
       <div className="node-search">
-        <span>Node Search</span>
-        <span className="node-search-meta">{createdNodes.length} created</span>
+        <div>
+          <span>Node Search</span>
+          <input
+            type="search"
+            className="node-search-input"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search by name, description, or node ID"
+            aria-label="Search nodes"
+          />
+        </div>
+        <span className="node-search-meta">
+          {filteredNodes.length} shown / {createdNodes.length} created
+        </span>
       </div>
       <div className="node-canvas">
-        {loadingNodes && (
-          <div className="node-empty-state">
-            Loading nodes...
-          </div>
-        )}
+        <div className="node-canvas-scroll">
+          {loadingNodes && (
+            <div className="node-empty-state">
+              Loading nodes...
+            </div>
+          )}
 
-        {!loadingNodes && createdNodes.length === 0 && (
-          <div className="node-empty-state">
-            No nodes yet. Create one to generate its node ID and API secret.
-          </div>
-        )}
+          {!loadingNodes && createdNodes.length === 0 && (
+            <div className="node-empty-state">
+              No nodes yet. Create one to generate its node ID and API secret.
+            </div>
+          )}
 
-        {createdNodes.map((node) => (
-          <article key={node.id} className="node-card node-card-created">
-            <p className="node-card-name">{node.name}</p>
-            <p className="node-card-description">{node.description}</p>
-            <dl className="node-credentials">
-              <div>
-                <dt>Node ID</dt>
-                <dd>{node.id}</dd>
-              </div>
-            </dl>
-          </article>
-        ))}
+          {!loadingNodes && createdNodes.length > 0 && filteredNodes.length === 0 && (
+            <div className="node-empty-state">
+              No nodes match "{searchQuery.trim()}".
+            </div>
+          )}
+
+          {filteredNodes.map((node) => (
+            <article key={node.id} className="node-card node-card-created">
+              <p className="node-card-name">{node.name}</p>
+              <p className="node-card-description">{node.description}</p>
+              <dl className="node-credentials">
+                <div>
+                  <dt>Node ID</dt>
+                  <dd>{node.id}</dd>
+                </div>
+                <div>
+                  <dt>Status</dt>
+                  <dd>{node.status || "Unknown"}</dd>
+                </div>
+                <div>
+                  <dt>Last Update</dt>
+                  <dd>{formatRawDeviceData(node.telemetry)}</dd>
+                </div>
+                {node.telemetry && (
+                  <>
+                    <div>
+                      <dt>Temperature</dt>
+                      <dd>{node.telemetry.temperatureC ?? "N/A"} C</dd>
+                    </div>
+                    <div>
+                      <dt>Humidity</dt>
+                      <dd>{node.telemetry.humidityPct ?? "N/A"}%</dd>
+                    </div>
+                    <div>
+                      <dt>Battery</dt>
+                      <dd>{node.telemetry.batteryVolts ?? "N/A"} V</dd>
+                    </div>
+                  </>
+                )}
+              </dl>
+            </article>
+          ))}
+        </div>
 
         <button type="button" className="add-node" onClick={handleOpenForm} aria-label="Create node">
           +

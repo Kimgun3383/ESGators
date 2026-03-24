@@ -7,6 +7,30 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
+function normalizePrivateKey(privateKey) {
+  return String(privateKey || "").replace(/\\n/g, "\n");
+}
+
+function readServiceAccountFromEnv() {
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    return JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+  }
+
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
+
+  if (!projectId || !clientEmail || !privateKey) {
+    return null;
+  }
+
+  return {
+    project_id: projectId,
+    client_email: clientEmail,
+    private_key: privateKey,
+  };
+}
+
 function registerFirebase(app) {
   let admin;
 
@@ -23,26 +47,46 @@ function registerFirebase(app) {
     process.env.FIREBASE_SERVICE_ACCOUNT_PATH || "firebaseServiceKeys.json";
   const appName = process.env.FIREBASE_APP_NAME || "mwbe";
   const databaseURL = process.env.FIREBASE_DATABASE_URL;
-  const resolvedPath = path.resolve(process.cwd(), serviceAccountPath);
+  let serviceAccount;
 
-  if (!fs.existsSync(resolvedPath)) {
+  try {
+    serviceAccount = readServiceAccountFromEnv();
+  } catch (error) {
     app.log.warn(
-      { serviceAccountPath: resolvedPath },
-      "Firebase service account file not found. Firebase integration is disabled."
+      { error },
+      "Failed to parse Firebase service account from env. Firebase integration is disabled."
     );
     return;
   }
 
-  let serviceAccount;
+  if (!serviceAccount) {
+    const resolvedPath = path.resolve(process.cwd(), serviceAccountPath);
 
-  try {
-    serviceAccount = JSON.parse(fs.readFileSync(resolvedPath, "utf8"));
-  } catch (error) {
-    app.log.warn(
-      { error },
-      "Failed to parse Firebase service account file. Firebase integration is disabled."
-    );
-    return;
+    if (!fs.existsSync(resolvedPath)) {
+      app.log.warn(
+        {
+          serviceAccountPath: resolvedPath,
+          expectedEnvVars: [
+            "FIREBASE_SERVICE_ACCOUNT_JSON",
+            "FIREBASE_PROJECT_ID",
+            "FIREBASE_CLIENT_EMAIL",
+            "FIREBASE_PRIVATE_KEY",
+          ],
+        },
+        "Firebase credentials not found in env or service account file. Firebase integration is disabled."
+      );
+      return;
+    }
+
+    try {
+      serviceAccount = JSON.parse(fs.readFileSync(resolvedPath, "utf8"));
+    } catch (error) {
+      app.log.warn(
+        { error, serviceAccountPath: resolvedPath },
+        "Failed to parse Firebase service account file. Firebase integration is disabled."
+      );
+      return;
+    }
   }
 
   const hasNamedApp = admin.apps.some((existingApp) => existingApp.name === appName);

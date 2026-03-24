@@ -23,6 +23,27 @@ const userIdParamSchema = {
   },
 };
 
+const userSchema = {
+  type: "object",
+  properties: {
+    id: { type: "string", format: "uuid" },
+    email: { type: "string", format: "email" },
+    name: { type: "string" },
+    firebase_uid: { type: "string" },
+    created_at: { type: "string", format: "date-time" },
+    updated_at: { type: "string", format: "date-time" },
+  },
+};
+
+const errorSchema = {
+  type: "object",
+  properties: {
+    statusCode: { type: "integer" },
+    error: { type: "string" },
+    message: { type: "string" },
+  },
+};
+
 function ensureDb(app) {
   if (!app.hasDecorator("supabase")) {
     throw app.httpErrors.internalServerError(
@@ -32,26 +53,59 @@ function ensureDb(app) {
 }
 
 async function usersRoutes(app) {
-  app.get("/", async () => {
-    ensureDb(app);
+  app.get(
+    "/",
+    {
+      schema: {
+        tags: ["Users"],
+        summary: "List users",
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              users: {
+                type: "array",
+                items: userSchema,
+              },
+            },
+          },
+          500: errorSchema,
+        },
+      },
+    },
+    async () => {
+      ensureDb(app);
 
-    const { data, error } = await app.supabase
-      .from("users")
-      .select("id, email, name, firebase_uid, created_at, updated_at")
-      .order("created_at", { ascending: false });
+      const { data, error } = await app.supabase
+        .from("users")
+        .select("id, email, name, firebase_uid, created_at, updated_at")
+        .order("created_at", { ascending: false });
 
-    if (error) {
-      throw app.httpErrors.internalServerError(error.message);
+      if (error) {
+        throw app.httpErrors.internalServerError(error.message);
+      }
+
+      return { users: data };
     }
-
-    return { users: data };
-  });
+  );
 
   app.get(
     "/:id",
     {
       schema: {
+        tags: ["Users"],
+        summary: "Get user by ID",
         params: userIdParamSchema,
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              user: userSchema,
+            },
+          },
+          404: errorSchema,
+          500: errorSchema,
+        },
       },
     },
     async (request) => {
@@ -79,7 +133,24 @@ async function usersRoutes(app) {
     "/",
     {
       schema: {
+        tags: ["Users"],
+        summary: "Create or upsert a user",
         body: userBodySchema,
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              user: userSchema,
+            },
+          },
+          201: {
+            type: "object",
+            properties: {
+              user: userSchema,
+            },
+          },
+          500: errorSchema,
+        },
       },
     },
     async (request, reply) => {
@@ -144,8 +215,21 @@ async function usersRoutes(app) {
     "/:id",
     {
       schema: {
+        tags: ["Users"],
+        summary: "Update a user",
         params: userIdParamSchema,
         body: userBodySchema,
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              user: userSchema,
+            },
+          },
+          404: errorSchema,
+          409: errorSchema,
+          500: errorSchema,
+        },
       },
     },
     async (request) => {
@@ -186,7 +270,14 @@ async function usersRoutes(app) {
     "/:id",
     {
       schema: {
+        tags: ["Users"],
+        summary: "Delete a user",
         params: userIdParamSchema,
+        response: {
+          204: { description: "User deleted successfully." },
+          404: errorSchema,
+          500: errorSchema,
+        },
       },
     },
     async (request, reply) => {

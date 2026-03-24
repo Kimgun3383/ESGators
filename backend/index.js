@@ -11,7 +11,7 @@ app.get("/", (req, res) => {
     res.send("ESG Backend Running")
 })
 
-app.get("/data", async (req, res) => {
+app.get("", async (req, res) => {
     const snapshot = await db.ref("sensor_data").once("value")
     res.json(snapshot.val())
 })
@@ -19,3 +19,4 @@ app.get("/data", async (req, res) => {
 app.listen(5000, () => {
     console.log("Server running on port 5000")
 })
+/data

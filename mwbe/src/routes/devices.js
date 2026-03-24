@@ -54,6 +54,51 @@ const deviceIdParamSchema = {
   },
 };
 
+const deviceSchema = {
+  type: "object",
+  properties: {
+    deviceId: { type: "string" },
+    name: { type: "string" },
+    description: { type: "string" },
+    status: { type: "string" },
+  },
+};
+
+const claimedDeviceSchema = {
+  type: "object",
+  properties: {
+    deviceId: { type: "string" },
+    deviceSecret: { type: "string" },
+  },
+};
+
+const provisionedDeviceSchema = {
+  type: "object",
+  properties: {
+    firebaseCustomToken: { type: "string" },
+    firebaseUid: { type: "string" },
+    deviceId: { type: "string" },
+  },
+};
+
+const revokedDeviceSchema = {
+  type: "object",
+  properties: {
+    deviceId: { type: "string" },
+    status: { type: "string" },
+    revokedAt: { type: "string", format: "date-time" },
+  },
+};
+
+const errorSchema = {
+  type: "object",
+  properties: {
+    statusCode: { type: "integer" },
+    error: { type: "string" },
+    message: { type: "string" },
+  },
+};
+
 function ensureDb(app) {
   if (!app.hasDecorator("supabase")) {
     throw app.httpErrors.internalServerError(
@@ -145,15 +190,47 @@ async function findOwner(app, ownerUid) {
 }
 
 async function devicesRoutes(app) {
-  app.get("/", async () => {
-    return { message: "devices api endpoint" };
-  });
+  app.get(
+    "/",
+    {
+      schema: {
+        tags: ["Devices"],
+        summary: "Devices index",
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              message: { type: "string" },
+            },
+          },
+        },
+      },
+    },
+    async () => {
+      return { message: "devices api endpoint" };
+    }
+  );
 
   app.get(
     "/owned",
     {
       schema: {
+        tags: ["Devices"],
+        summary: "List devices owned by a user",
         querystring: ownerQuerySchema,
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              devices: {
+                type: "array",
+                items: deviceSchema,
+              },
+            },
+          },
+          404: errorSchema,
+          500: errorSchema,
+        },
       },
     },
     async (request) => {
@@ -254,7 +331,14 @@ async function devicesRoutes(app) {
     "/claim",
     {
       schema: {
+        tags: ["Devices"],
+        summary: "Claim a device with generated credentials",
         querystring: claimQuerySchema,
+        response: {
+          201: claimedDeviceSchema,
+          404: errorSchema,
+          500: errorSchema,
+        },
       },
     },
     async (request, reply) => claimDevice(request.query.ownerUid, "", "", reply)
@@ -264,7 +348,14 @@ async function devicesRoutes(app) {
     "/claim",
     {
       schema: {
+        tags: ["Devices"],
+        summary: "Claim a named device with generated credentials",
         body: claimBodySchema,
+        response: {
+          201: claimedDeviceSchema,
+          404: errorSchema,
+          500: errorSchema,
+        },
       },
     },
     async (request, reply) =>
@@ -280,7 +371,16 @@ async function devicesRoutes(app) {
     "/provision",
     {
       schema: {
+        tags: ["Devices"],
+        summary: "Provision a device and mint a Firebase custom token",
         body: provisionBodySchema,
+        response: {
+          200: provisionedDeviceSchema,
+          401: errorSchema,
+          403: errorSchema,
+          404: errorSchema,
+          500: errorSchema,
+        },
       },
     },
     async (request) => {
@@ -335,7 +435,14 @@ async function devicesRoutes(app) {
     "/:deviceId/revoke",
     {
       schema: {
+        tags: ["Devices"],
+        summary: "Revoke a device",
         params: deviceIdParamSchema,
+        response: {
+          200: revokedDeviceSchema,
+          404: errorSchema,
+          500: errorSchema,
+        },
       },
     },
     async (request) => {
@@ -386,7 +493,14 @@ async function devicesRoutes(app) {
     "/:deviceId",
     {
       schema: {
+        tags: ["Devices"],
+        summary: "Delete a device",
         params: deviceIdParamSchema,
+        response: {
+          204: { description: "Device deleted successfully." },
+          404: errorSchema,
+          500: errorSchema,
+        },
       },
     },
     async (request, reply) => {

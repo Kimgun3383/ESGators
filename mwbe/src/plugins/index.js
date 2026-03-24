@@ -7,6 +7,7 @@
 const cors = require("@fastify/cors");
 const helmet = require("@fastify/helmet");
 const sensible = require("@fastify/sensible");
+const registerSwagger = require("./swagger");
 const registerSupabase = require("./supabase");
 const registerFirebase = require("./firebase");
 
@@ -42,6 +43,7 @@ function buildCorsOrigin() {
 
 function registerPlugins(app) {
   app.register(sensible);
+  registerSwagger(app);
   app.register(helmet);
   app.register(cors, {
     origin: buildCorsOrigin(),
