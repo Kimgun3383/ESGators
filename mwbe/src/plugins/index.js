@@ -40,6 +40,7 @@ function buildCorsOrigin() {
     callback(new Error("Origin not allowed by CORS"), false);
   };
 }
+const registerGrafanaMetrics = require("./grafanaMetrics");
 
 function registerPlugins(app) {
   app.register(sensible);
@@ -52,6 +53,7 @@ function registerPlugins(app) {
   });
   registerSupabase(app);
   registerFirebase(app);
+  registerGrafanaMetrics(app);
 }
 
 module.exports = registerPlugins;

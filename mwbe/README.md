@@ -94,6 +94,23 @@ create table if not exists public.users (
 );
 ```
 
+## 4-1. Configure Grafana Cloud (required for metrics push)
+
+If you use IoT endpoints (`/iot/data`, `/iot/dummy`) and want data to be pushed to Grafana Cloud, these `.env` values are required:
+
+- `GRAFANA_USERNAME`
+- `GRAFANA_API_KEY`
+- `GRAFANA_PUSH_URL` (example: `https://prometheus-prod-49-prod-ap-northeast-0.grafana.net/api/prom/push`)
+
+Without these values, the API still runs, but Grafana push is skipped.
+
+## 4-2. IoT Dummy API deprecation notice
+
+`mwbe` IoT dummy endpoints are now deprecated.
+
+- Deprecated in `mwbe`: `/iot/dummy`, `/iot/data`, `/iot/metrics`
+- Use `backend` service for dummy generation and Grafana metrics push tests.
+
 ## 5. Basic concepts in this starter
 
 ### `src/app.js`
@@ -194,30 +211,11 @@ fly apps create <your-app-name>
 fly secrets set SUPABASE_URL=https://YOUR_PROJECT_ID.supabase.co SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY
 ```
 
-4. Set Firebase secrets for hosted provisioning:
-
-Option A, preferred on Fly.io, store the service account fields as separate secrets:
+If you use Grafana metrics push in Fly, set these secrets too:
 
 ```bash
-fly secrets set \
-  FIREBASE_PROJECT_ID=your-firebase-project-id \
-  FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your-project-id.iam.gserviceaccount.com \
-  FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+fly secrets set GRAFANA_USERNAME=YOUR_INSTANCE_ID GRAFANA_API_KEY=YOUR_GRAFANA_TOKEN GRAFANA_PUSH_URL=https://prometheus-prod-49-prod-ap-northeast-0.grafana.net/api/prom/push
 ```
-
-Optional if you use Firebase Realtime Database:
-
-```bash
-fly secrets set FIREBASE_DATABASE_URL=https://your-project-id-default-rtdb.firebaseio.com
-```
-
-Option B, if you prefer, store the full JSON as one secret:
-
-```bash
-fly secrets set FIREBASE_SERVICE_ACCOUNT_JSON='{"type":"service_account","project_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n","client_email":"..."}'
-```
-
-The backend will now load Firebase credentials from env first, then fall back to `firebaseServiceKeys.json` for local development.
 
 ### Deploy
 

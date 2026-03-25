@@ -43,8 +43,9 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<LazyRoute><SplashPage /></LazyRoute>} />
-          <Route path="/auth" element={<LazyRoute><AuthPage /></LazyRoute>} />
+          <Route path="/" element={<SplashPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/auth" element={<AuthPage />} />
           <Route
             path="/app"
             element={(
