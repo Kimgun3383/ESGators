@@ -64,6 +64,25 @@ const deviceSchema = {
   },
 };
 
+const networkDeviceSchema = {
+  type: "object",
+  properties: {
+    deviceId: { type: "string" },
+    name: { type: "string" },
+    description: { type: "string" },
+    status: { type: "string" },
+    owner: {
+      type: "object",
+      properties: {
+        id: { type: "string", format: "uuid" },
+        email: { type: "string", format: "email" },
+        name: { type: "string" },
+        firebaseUid: { type: "string" },
+      },
+    },
+  },
+};
+
 const claimedDeviceSchema = {
   type: "object",
   properties: {
@@ -189,6 +208,55 @@ async function findOwner(app, ownerUid) {
   return ownerById;
 }
 
+async function loadOwnersByKeys(app, ownerKeys) {
+  if (ownerKeys.length === 0) {
+    return new Map();
+  }
+
+  const ownerKeySet = [...new Set(ownerKeys.filter(Boolean))];
+  const ownersByKey = new Map();
+
+  const { data: ownersById, error: ownersByIdError } = await app.supabase
+    .from("users")
+    .select("id, email, name, firebase_uid")
+    .in("id", ownerKeySet.filter(isUuid));
+
+  if (ownersByIdError && ownersByIdError.code !== "22P02") {
+    throw app.httpErrors.internalServerError(ownersByIdError.message);
+  }
+
+  for (const owner of ownersById || []) {
+    ownersByKey.set(owner.id, owner);
+
+    if (owner.firebase_uid) {
+      ownersByKey.set(owner.firebase_uid, owner);
+    }
+  }
+
+  const nonUuidOwnerKeys = ownerKeySet.filter((ownerKey) => !isUuid(ownerKey));
+
+  if (nonUuidOwnerKeys.length > 0) {
+    const { data: ownersByFirebaseUid, error: ownersByFirebaseUidError } = await app.supabase
+      .from("users")
+      .select("id, email, name, firebase_uid")
+      .in("firebase_uid", nonUuidOwnerKeys);
+
+    if (ownersByFirebaseUidError) {
+      throw app.httpErrors.internalServerError(ownersByFirebaseUidError.message);
+    }
+
+    for (const owner of ownersByFirebaseUid || []) {
+      ownersByKey.set(owner.id, owner);
+
+      if (owner.firebase_uid) {
+        ownersByKey.set(owner.firebase_uid, owner);
+      }
+    }
+  }
+
+  return ownersByKey;
+}
+
 async function devicesRoutes(app) {
   app.get(
     "/",
@@ -267,6 +335,72 @@ async function devicesRoutes(app) {
             status: device.status,
           });
         }
+      }
+
+      return {
+        devices: Array.from(devicesById.values()),
+      };
+    }
+  );
+
+  app.get(
+    "/network",
+    {
+      schema: {
+        tags: ["Devices"],
+        summary: "List all devices across the network with owner details",
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              devices: {
+                type: "array",
+                items: networkDeviceSchema,
+              },
+            },
+          },
+          500: errorSchema,
+        },
+      },
+    },
+    async () => {
+      ensureDb(app);
+
+      const { data: devices, error: devicesError } = await app.supabase
+        .from("devices")
+        .select("device_id, owner_uid, name, description, status")
+        .order("device_id", { ascending: true });
+
+      if (devicesError) {
+        throw app.httpErrors.internalServerError(devicesError.message);
+      }
+
+      const ownersByKey = await loadOwnersByKeys(
+        app,
+        (devices || []).map((device) => device.owner_uid)
+      );
+
+      const devicesById = new Map();
+
+      for (const device of devices || []) {
+        const owner = ownersByKey.get(device.owner_uid);
+
+        if (!owner || devicesById.has(device.device_id)) {
+          continue;
+        }
+
+        devicesById.set(device.device_id, {
+          deviceId: device.device_id,
+          name: device.name || "Unnamed Node",
+          description: device.description || "",
+          status: device.status,
+          owner: {
+            id: owner.id,
+            email: owner.email,
+            name: owner.name,
+            firebaseUid: owner.firebase_uid,
+          },
+        });
       }
 
       return {

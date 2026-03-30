@@ -1,0 +1,15 @@
+import { cn } from "../../lib/utils"
+
+function Input({ className, ...props }) {
+  return (
+    <input
+      className={cn(
+        "flex h-11 w-full rounded-[10px] border border-[#2b3549] bg-[#0e131d] px-3 py-2 text-sm text-[var(--text)] outline-none transition-colors placeholder:text-[var(--muted)] focus:border-[rgba(62,207,142,0.45)]",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+export default Input

@@ -1,14 +1,19 @@
 /**
  * Node config page.
- * 
+ *
  * TODO: Add node configuration settings, public / private node access, etc.
- * 
+ *
  * Last Edit: Nicholas Sardinia, 3/1/2026
  */
 import { useState } from "react"
+import Button from "../components/ui/button"
+import { Card, CardContent } from "../components/ui/card"
+import Input from "../components/ui/input"
+import Textarea from "../components/ui/textarea"
 import { useAuth } from "../components/AuthContext"
 import useOwnedNodes from "../hooks/useOwnedNodes"
 import { API_BASE_URL } from "../lib/api"
+import "./NodeMapPage.css"
 
 function formatRawDeviceData(telemetry) {
   if (!telemetry) {
@@ -107,31 +112,27 @@ function NodeMapPage() {
   }
 
   return (
-    <section className="workspace-content node-map-page">
-      <p className="page-kicker">Node Map</p>
-      <div className="node-search">
+    <section className="node-map-page">
+      <p className="mb-[10px] pt-2 text-base font-bold uppercase tracking-[0.08em] text-[var(--muted)]">Your Sensor Nodes</p>
+      <div className="mb-[14px] flex items-center justify-between gap-3 rounded-[10px] border border-[var(--border)] bg-[var(--bg-elevated)] px-[14px] py-3 text-[0.95rem] text-[var(--muted)]">
         <div>
-          <span>Node Search</span>
-          <input
+          <span className="text-[var(--text)]">Node Search</span>
+          <Input
             type="search"
-            className="node-search-input"
+            className="mt-2 max-w-[420px]"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder="Search by name, description, or node ID"
             aria-label="Search nodes"
           />
         </div>
-        <span className="node-search-meta">
+        <span className="text-[0.82rem] text-[#c7d1e1]">
           {filteredNodes.length} shown / {createdNodes.length} created
         </span>
       </div>
       <div className="node-canvas">
         <div className="node-canvas-scroll">
-          {loadingNodes && (
-            <div className="node-empty-state">
-              Loading nodes...
-            </div>
-          )}
+          {loadingNodes && <div className="node-empty-state">Loading nodes...</div>}
 
           {!loadingNodes && createdNodes.length === 0 && (
             <div className="node-empty-state">
@@ -146,35 +147,35 @@ function NodeMapPage() {
           )}
 
           {filteredNodes.map((node) => (
-            <article key={node.id} className="node-card node-card-created">
-              <p className="node-card-name">{node.name}</p>
-              <p className="node-card-description">{node.description}</p>
+            <article key={node.id} className="node-card-created">
+              <p className="mb-2 text-base font-bold text-[#effbf4]">{node.name}</p>
+              <p className="mb-[14px] leading-[1.5] text-[#b8dec9]">{node.description}</p>
               <dl className="node-credentials">
                 <div>
-                  <dt>Node ID</dt>
-                  <dd>{node.id}</dd>
+                  <dt className="mb-1 text-[0.72rem] uppercase tracking-[0.08em] text-[#b4c2d8]">Node ID</dt>
+                  <dd className="m-0 break-words text-[0.84rem] leading-[1.45] text-white">{node.id}</dd>
                 </div>
                 <div>
-                  <dt>Status</dt>
-                  <dd>{node.status || "Unknown"}</dd>
+                  <dt className="mb-1 text-[0.72rem] uppercase tracking-[0.08em] text-[#b4c2d8]">Status</dt>
+                  <dd className="m-0 break-words text-[0.84rem] leading-[1.45] text-white">{node.status || "Unknown"}</dd>
                 </div>
                 <div>
-                  <dt>Last Update</dt>
-                  <dd>{formatRawDeviceData(node.telemetry)}</dd>
+                  <dt className="mb-1 text-[0.72rem] uppercase tracking-[0.08em] text-[#b4c2d8]">Last Update</dt>
+                  <dd className="m-0 break-words text-[0.84rem] leading-[1.45] text-white">{formatRawDeviceData(node.telemetry)}</dd>
                 </div>
                 {node.telemetry && (
                   <>
                     <div>
-                      <dt>Temperature</dt>
-                      <dd>{node.telemetry.temperatureC ?? "N/A"} C</dd>
+                      <dt className="mb-1 text-[0.72rem] uppercase tracking-[0.08em] text-[#b4c2d8]">Temperature</dt>
+                      <dd className="m-0 break-words text-[0.84rem] leading-[1.45] text-white">{node.telemetry.temperatureC ?? "N/A"} C</dd>
                     </div>
                     <div>
-                      <dt>Humidity</dt>
-                      <dd>{node.telemetry.humidityPct ?? "N/A"}%</dd>
+                      <dt className="mb-1 text-[0.72rem] uppercase tracking-[0.08em] text-[#b4c2d8]">Humidity</dt>
+                      <dd className="m-0 break-words text-[0.84rem] leading-[1.45] text-white">{node.telemetry.humidityPct ?? "N/A"}%</dd>
                     </div>
                     <div>
-                      <dt>Battery</dt>
-                      <dd>{node.telemetry.batteryVolts ?? "N/A"} V</dd>
+                      <dt className="mb-1 text-[0.72rem] uppercase tracking-[0.08em] text-[#b4c2d8]">Battery</dt>
+                      <dd className="m-0 break-words text-[0.84rem] leading-[1.45] text-white">{node.telemetry.batteryVolts ?? "N/A"} V</dd>
                     </div>
                   </>
                 )}
@@ -183,98 +184,106 @@ function NodeMapPage() {
           ))}
         </div>
 
-        <button type="button" className="add-node" onClick={handleOpenForm} aria-label="Create node">
+        <Button type="button" className="add-node size-11 rounded-full p-0 text-[30px] leading-none" onClick={handleOpenForm} aria-label="Create node">
           +
-        </button>
+        </Button>
       </div>
 
       {isFormOpen && (
         <div className="node-modal-backdrop" role="presentation" onClick={handleCloseForm}>
-          <section
+          <Card
             className="node-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="create-node-title"
             onClick={(event) => event.stopPropagation()}
           >
-            <p className="page-kicker">Node Setup</p>
-            <h2 id="create-node-title" className="page-title">
-              Create a node
-            </h2>
-            <p className="page-subtitle">
-              Submit the node details and the backend will generate a node ID and API secret.
-            </p>
+            <CardContent className="p-6">
+              <p className="mb-[10px] pt-2 text-base font-bold uppercase tracking-[0.08em] text-[var(--muted)]">Node Setup</p>
+              <h2 id="create-node-title" className="mb-2 text-[clamp(1.4rem,2.4vw,2rem)] font-semibold">
+                Create a node
+              </h2>
+              <p className="mb-[18px] text-base font-medium text-[var(--muted)]">
+                Submit the node details and the backend will generate a node ID and API secret.
+              </p>
 
-            <form className="auth-form" onSubmit={handleSubmit}>
-              <label className="field">
-                <span>Node name</span>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="North greenhouse sensor"
-                  maxLength={120}
-                  required
-                />
-              </label>
+              <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
+                <label className="flex flex-col gap-[7px] text-[0.86rem] text-[var(--muted)]">
+                  <span>Node name</span>
+                  <Input
+                    type="text"
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    placeholder="North greenhouse sensor"
+                    maxLength={120}
+                    required
+                  />
+                </label>
 
-              <label className="field">
-                <span>Description</span>
-                <textarea
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                  placeholder="Tracks humidity, temperature, and air quality."
-                  rows="4"
-                  maxLength={500}
-                  required
-                />
-              </label>
+                <label className="flex flex-col gap-[7px] text-[0.86rem] text-[var(--muted)]">
+                  <span>Description</span>
+                  <Textarea
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                    placeholder="Tracks humidity, temperature, and air quality."
+                    rows="4"
+                    maxLength={500}
+                    required
+                  />
+                </label>
 
-              {error && <p className="auth-error">{error}</p>}
+                {error && <p className="m-0 text-[0.86rem] text-[#fca5a5]">{error}</p>}
 
-              <div className="node-modal-actions">
-                <button type="button" className="secondary-action" onClick={handleCloseForm} disabled={submitting}>
-                  Cancel
-                </button>
-                <button type="submit" className="primary-action" disabled={submitting}>
-                  {submitting ? "Creating..." : "Create Node"}
-                </button>
-              </div>
-            </form>
-          </section>
+                <div className="node-modal-actions">
+                  <Button type="button" variant="secondary" onClick={handleCloseForm} disabled={submitting}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? "Creating..." : "Create Node"}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
         </div>
       )}
 
       {createdSecret && (
         <div className="node-modal-backdrop" role="presentation">
-          <section
-            className="node-modal node-secret-modal"
+          <Card
+            className="node-modal border-[rgba(248,113,113,0.28)]"
             role="dialog"
             aria-modal="true"
             aria-labelledby="node-secret-title"
           >
-            <p className="page-kicker">Secret Key</p>
-            <h2 id="node-secret-title" className="page-title">
-              Save this API secret now
-            </h2>
-            <p className="page-subtitle">
-              This is the only time the secret for {createdSecret.name} will be shown. Store it securely and do not
-              share it.
-            </p>
+            <CardContent className="p-6">
+              <p className="mb-[10px] pt-2 text-base font-bold uppercase tracking-[0.08em] text-[var(--muted)]">Secret Key</p>
+              <h2 id="node-secret-title" className="mb-2 text-[clamp(1.4rem,2.4vw,2rem)] font-semibold">
+                Save this API secret now
+              </h2>
+              <p className="mb-[18px] text-base font-medium text-[var(--muted)]">
+                This is the only time the secret for {createdSecret.name} will be shown. Store it securely and do not
+                share it.
+              </p>
 
-            <div className="node-secret-panel">
-              <p className="node-secret-label">Node ID</p>
-              <code className="node-secret-value">{createdSecret.id}</code>
-              <p className="node-secret-label">API Secret</p>
-              <code className="node-secret-value">{createdSecret.secret}</code>
-            </div>
+              <div className="node-secret-panel">
+                <p className="mb-[6px] text-[0.76rem] uppercase tracking-[0.08em] text-[#fecaca]">Node ID</p>
+                <code className="mb-[14px] block rounded-[10px] border border-[rgba(255,255,255,0.08)] bg-[rgba(9,11,16,0.85)] px-3 py-2.5 text-[0.84rem] leading-[1.5] break-words text-[#fff7ed]">
+                  {createdSecret.id}
+                </code>
+                <p className="mb-[6px] text-[0.76rem] uppercase tracking-[0.08em] text-[#fecaca]">API Secret</p>
+                <code className="block rounded-[10px] border border-[rgba(255,255,255,0.08)] bg-[rgba(9,11,16,0.85)] px-3 py-2.5 text-[0.84rem] leading-[1.5] break-words text-[#fff7ed]">
+                  {createdSecret.secret}
+                </code>
+              </div>
 
-            <div className="node-modal-actions">
-              <button type="button" className="primary-action" onClick={() => setCreatedSecret(null)}>
-                I saved it
-              </button>
-            </div>
-          </section>
+              <div className="node-modal-actions">
+                <Button type="button" onClick={() => setCreatedSecret(null)}>
+                  I saved it
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
     </section>

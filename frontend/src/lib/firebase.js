@@ -1,5 +1,5 @@
 /**
- * Firebase driver script. Can make connections to firebasae and test config. Initializes firebase connection.
+ * Firebase driver script. Can make connections to firebase and test config. Initializes firebase connection.
  * 
  * Last Edit: Nicholas Sardinia, 3/1/2026
  */
