@@ -1,4 +1,3 @@
-require("dotenv").config()
 const express = require("express")
 const cors = require("cors")
 const path = require("node:path")
@@ -6,7 +5,6 @@ const axios = require("axios")
 const protobuf = require("protobufjs")
 const snappy = require("snappy")
 const promClient = require("prom-client")
-
 const { createSupabaseFromEnv } = require("./supabase")
 
 let defaultDb = null
@@ -514,12 +512,6 @@ function createApp(options = {}) {
     return app
 }
 
-if (require.main === module) {
-    createApp().listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`)
-    })
-}
-
 module.exports = {
     buildSensorReadingsCsv,
     createApp,
@@ -529,4 +521,19 @@ module.exports = {
     pushMetricsToGrafana,
     storeSensorReading,
     calculateEsgEnvironmentScore,
+}
+
+if (require.main === module) {
+    const server = createApp().listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`)
+    })
+
+    function shutdown() {
+        server.close((error) => {
+            process.exit(error ? 1 : 0)
+        })
+    }
+
+    process.on("SIGINT", shutdown)
+    process.on("SIGTERM", shutdown)
 }
