@@ -13,7 +13,6 @@ function registerRoutes(app) {
   app.register(usersRoutes, { prefix: "/users" });
   app.register(devicesRoutes, {prefix: "/devices"});
   app.register(configurationRoutes, { prefix: "/configuration" });
-  app.register(iotRoutes, { prefix: "/iot" });
 }
 
 module.exports = registerRoutes;
