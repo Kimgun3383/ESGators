@@ -336,6 +336,62 @@
   max-width: 940px;
 }
 
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.dashboard-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent), var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.24);
+}
+
+.dashboard-card-title {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+
+.dashboard-card-copy {
+  margin: 0 0 14px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.dashboard-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.export-button-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.export-button {
+  min-width: 170px;
+}
+
+.export-status,
+.export-error {
+  margin: 14px 0 0;
+  font-size: 0.92rem;
+}
+
+.export-status {
+  color: #cdeedc;
+}
+
+.export-error {
+  color: #f9b4b4;
+}
+
 .node-map-page {
   max-width: none;
   flex: 1 1 auto;
@@ -1308,5 +1364,9 @@
   .node-card {
     width: 88px;
     min-height: 88px;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
   }
 }
