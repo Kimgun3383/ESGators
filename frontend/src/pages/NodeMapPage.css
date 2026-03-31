@@ -1,0 +1,104 @@
+.node-map-page {
+  max-width: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.node-canvas {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent), var(--bg-elevated);
+  padding: clamp(14px, 3vh, 28px);
+}
+
+.node-canvas-scroll {
+  height: 100%;
+  padding-right: 72px;
+  padding-bottom: calc(clamp(14px, 3vh, 28px) + 74px);
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: clamp(10px, 2vw, 20px);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.node-card-created {
+  width: min(320px, 100%);
+  min-height: 0;
+  border-radius: 12px;
+  border: 1px solid rgba(62, 207, 142, 0.34);
+  background: linear-gradient(180deg, rgba(62, 207, 142, 0.16), rgba(62, 207, 142, 0.06));
+  color: #d4f7e6;
+  padding: clamp(8px, 1.2vh, 12px);
+}
+
+.node-credentials {
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.node-credentials div {
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(8, 12, 18, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.node-empty-state {
+  max-width: 420px;
+  padding: 18px 20px;
+  border-radius: 12px;
+  border: 1px dashed rgba(154, 164, 181, 0.35);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.add-node {
+  position: absolute;
+  right: 48px;
+  bottom: 16px;
+}
+
+.node-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4, 7, 12, 0.74);
+  backdrop-filter: blur(6px);
+}
+
+.node-modal {
+  width: min(520px, 100%);
+}
+
+.node-secret-panel {
+  margin-bottom: 18px;
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.24);
+}
+
+.node-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .node-canvas {
+    padding: 14px;
+  }
+}

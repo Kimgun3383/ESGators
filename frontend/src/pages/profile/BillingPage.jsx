@@ -1,43 +1,51 @@
 /**
  * Billing page shell.
- * 
+ *
  * TODO: implement functionality to enable sustainable scalability based on user DB reads and writes.
- * TODO: Determine best billing scheme. Reads + writes or charge for private writes and all reads. 
+ * TODO: Determine best billing scheme. Reads + writes or charge for private writes and all reads.
  *       Private writes + all reads may encourage public data sharing. Will explore literature.
- * 
+ *
  * Last Edit: Nicholas Sardinia, 3/1/2026
  */
+import Button from "../../components/ui/button"
+import { Card, CardContent } from "../../components/ui/card"
 
 function BillingPage() {
   return (
-    <section className="profile-content">
-      <h1 className="page-title">Billing</h1>
-      <p className="page-subtitle">Manage plans, invoices, and payment methods.</p>
+    <section className="max-w-[900px]">
+      <h1 className="mb-2 text-[clamp(1.4rem,2.4vw,2rem)] font-semibold">Billing</h1>
+      <p className="mb-[18px] text-base font-medium text-[var(--muted)]">Manage plans, invoices, and payment methods.</p>
 
-      <div className="settings-card">
-        <h2>Current Plan</h2>
-        <p>TODO Plans</p>
-        <div className="billing-pill-row">
-          <span className="billing-pill">Plan Info</span>
-          <span className="billing-pill muted">$TBD/request</span>
-        </div>
-        <button type="button" className="primary-action">Manage subscription</button>
-      </div>
+      <Card className="mb-[14px] shadow-none">
+        <CardContent className="p-[18px]">
+          <h2 className="mb-[6px] text-base font-semibold">Current Plan</h2>
+          <p className="mb-[14px] text-[0.92rem] text-[var(--muted)]">TODO Plans</p>
+          <div className="mb-[14px] flex gap-2">
+            <span className="rounded-full border border-[rgba(62,207,142,0.36)] bg-[rgba(62,207,142,0.12)] px-[10px] py-1.5 text-[0.8rem] text-[#d3f5e4]">Plan Info</span>
+            <span className="rounded-full border border-[#2b3549] bg-[#141a27] px-[10px] py-1.5 text-[0.8rem] text-[var(--muted)]">$TBD/request</span>
+          </div>
+          <Button type="button">Manage subscription</Button>
+        </CardContent>
+      </Card>
 
-      <div className="settings-card">
-        <h2>Payment Method</h2>
-        <p>TODO Charge Info</p>
-        <button type="button" className="secondary-action">Update card</button>
-      </div>
+      <Card className="mb-[14px] shadow-none">
+        <CardContent className="p-[18px]">
+          <h2 className="mb-[6px] text-base font-semibold">Payment Method</h2>
+          <p className="mb-[14px] text-[0.92rem] text-[var(--muted)]">TODO Charge Info</p>
+          <Button type="button" variant="secondary">Update card</Button>
+        </CardContent>
+      </Card>
 
-      <div className="settings-card">
-        <h2>Recent Invoices</h2>
-        <div className="invoice-list">
-          <div className="invoice-row"><span>INV-2026-0215</span><span>$TODO</span></div>
-          <div className="invoice-row"><span>INV-2026-0115</span><span>$TODO</span></div>
-          <div className="invoice-row"><span>INV-2025-1215</span><span>$TODO</span></div>
-        </div>
-      </div>
+      <Card className="shadow-none">
+        <CardContent className="p-[18px]">
+          <h2 className="mb-[10px] text-base font-semibold">Recent Invoices</h2>
+          <div className="overflow-hidden rounded-[10px] border border-[#273042]">
+            <div className="flex justify-between gap-2 px-3 py-2.5 text-[0.9rem] text-[var(--muted)]"><span>INV-2026-0215</span><span>$TODO</span></div>
+            <div className="flex justify-between gap-2 border-t border-[#273042] px-3 py-2.5 text-[0.9rem] text-[var(--muted)]"><span>INV-2026-0115</span><span>$TODO</span></div>
+            <div className="flex justify-between gap-2 border-t border-[#273042] px-3 py-2.5 text-[0.9rem] text-[var(--muted)]"><span>INV-2025-1215</span><span>$TODO</span></div>
+          </div>
+        </CardContent>
+      </Card>
     </section>
   )
 }

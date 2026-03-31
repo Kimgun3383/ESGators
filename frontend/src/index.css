@@ -1,13 +1,60 @@
-body {
-  margin: 0;
-  font-family: "Geist", "Space Grotesk", "Satoshi", "Avenir Next", sans-serif;
-  background: #090b10;
-  color: #e5e7eb;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@import "tailwindcss";
+
+:root {
+  --bg: #090b10;
+  --bg-elevated: #10141c;
+  --panel: #121722;
+  --panel-soft: #171d2a;
+  --border: #252d3c;
+  --text: #e5e7eb;
+  --muted: #9aa4b5;
+  --accent: #3ecf8e;
+  --accent-soft: rgba(62, 207, 142, 0.18);
+  --danger: #f87171;
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --font-sans: "Geist", "Space Grotesk", "Satoshi", "Avenir Next", sans-serif;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  a {
+    color: inherit;
+  }
+
+  code {
+    font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+  }
 }

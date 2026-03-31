@@ -31,6 +31,25 @@ function readServiceAccountFromEnv() {
   };
 }
 
+function getDatabaseUrl(serviceAccount) {
+  const explicitDatabaseUrl = process.env.FIREBASE_DATABASE_URL;
+
+  if (explicitDatabaseUrl) {
+    return explicitDatabaseUrl;
+  }
+
+  const projectId =
+    process.env.FIREBASE_PROJECT_ID ||
+    serviceAccount?.project_id ||
+    serviceAccount?.projectId;
+
+  if (!projectId) {
+    return null;
+  }
+
+  return `https://${projectId}-default-rtdb.firebaseio.com`;
+}
+
 function registerFirebase(app) {
   let admin;
 
@@ -46,7 +65,6 @@ function registerFirebase(app) {
   const serviceAccountPath =
     process.env.FIREBASE_SERVICE_ACCOUNT_PATH || "firebaseServiceKeys.json";
   const appName = process.env.FIREBASE_APP_NAME || "mwbe";
-  const databaseURL = process.env.FIREBASE_DATABASE_URL;
   let serviceAccount;
 
   try {
@@ -88,6 +106,8 @@ function registerFirebase(app) {
       return;
     }
   }
+
+  const databaseURL = getDatabaseUrl(serviceAccount);
 
   const hasNamedApp = admin.apps.some((existingApp) => existingApp.name === appName);
   const firebaseApp = hasNamedApp
