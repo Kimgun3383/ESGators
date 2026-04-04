@@ -1,7 +1,11 @@
 const test = require("node:test")
 const assert = require("node:assert/strict")
 
-const { startServer } = require("../app")
+const { normalizeFirebaseDevicePayload, startServer } = require("../app")
+
+delete process.env.GRAFANA_USERNAME
+delete process.env.GRAFANA_API_KEY
+delete process.env.GRAFANA_PUSH_URL
 
 function hasRemoteWriteConfig() {
     return Boolean(
@@ -11,8 +15,81 @@ function hasRemoteWriteConfig() {
     )
 }
 
-async function createTestServer() {
-    const runtime = startServer({ port: 0, enablePolling: false })
+function createMockFirebaseDb(valuesByPath) {
+    return {
+        ref(path) {
+            return {
+                async once(eventName) {
+                    assert.equal(eventName, "value")
+                    return {
+                        val() {
+                            return valuesByPath[path] ?? null
+                        },
+                    }
+                },
+            }
+        },
+    }
+}
+
+class MockSupabaseQuery {
+    constructor(rows) {
+        this.rows = rows
+        this.filters = []
+        this.singleRowMode = false
+    }
+
+    select() {
+        return this
+    }
+
+    eq(column, value) {
+        this.filters.push({ column, values: [value] })
+        return this
+    }
+
+    in(column, values) {
+        this.filters.push({ column, values })
+        return this
+    }
+
+    maybeSingle() {
+        this.singleRowMode = true
+        return this
+    }
+
+    then(resolve, reject) {
+        let data = [...this.rows]
+
+        this.filters.forEach((filter) => {
+            data = data.filter((row) => filter.values.includes(row[filter.column]))
+        })
+
+        const result = this.singleRowMode
+            ? { data: data[0] || null, error: null }
+            : { data, error: null }
+
+        return Promise.resolve(result).then(resolve, reject)
+    }
+}
+
+class MockSupabaseClient {
+    constructor(tables = {}) {
+        this.tables = tables
+    }
+
+    from(tableName) {
+        return new MockSupabaseQuery(this.tables[tableName] || [])
+    }
+}
+
+async function createTestServer(options = {}) {
+    const runtime = startServer({
+        port: 0,
+        enablePolling: false,
+        supabase: null,
+        ...options,
+    })
     await new Promise((resolve) => runtime.server.once("listening", resolve))
     const address = runtime.server.address()
     const baseUrl = `http://127.0.0.1:${address.port}`
@@ -89,8 +166,8 @@ test("metrics endpoint exposes Prometheus-formatted sensor and ESG values", asyn
         assert.equal(response.status, 200)
 
         const metricsText = await response.text()
-        assert.match(metricsText, /sensor_data_metric\{sensor_id="sensor-prom",metric_type="temperature",source="test-suite"\} 31/)
-        assert.match(metricsText, /sensor_data_anomaly_flag\{sensor_id="sensor-prom",metric_type="temperature",source="test-suite",severity="warning"\} 1/)
+        assert.match(metricsText, /sensor_data_metric\{sensor_id="sensor-prom",metric_type="temperature",source="test-suite",owner_uid="unknown",owner_email="unknown",device_name="sensor-prom"\} 31/)
+        assert.match(metricsText, /sensor_data_anomaly_flag\{sensor_id="sensor-prom",metric_type="temperature",source="test-suite",owner_uid="unknown",owner_email="unknown",device_name="sensor-prom",severity="warning"\} 1/)
         assert.match(metricsText, /esg_environment_score\{scope="overall"\} 71\.43/)
         assert.match(metricsText, /esg_buffer_size 1/)
     } finally {
@@ -121,6 +198,237 @@ test("invalid samples are rejected with 400", async () => {
         const body = await response.json()
         assert.equal(body.rejected.length, 2)
         assert.match(body.error, /No valid samples/)
+    } finally {
+        await server.close()
+    }
+})
+
+test("normalizeFirebaseDevicePayload maps device export shape into ingestible samples", () => {
+    const samples = normalizeFirebaseDevicePayload("dev_472584440bca1b56b0518a6620641d39", {
+        no2: {
+            latest: {
+                deviceId: "dev_472584440bca1b56b0518a6620641d39",
+                raw: 3709,
+                updatedAtMs: 2685761,
+            },
+        },
+        sht30: {
+            latest: {
+                deviceId: "dev_472584440bca1b56b0518a6620641d39",
+                humidityPct: 49.45144,
+                temperatureC: 28.87732,
+                updatedAtMs: 2690353,
+            },
+        },
+        sound: {
+            latest: {
+                deviceId: "dev_472584440bca1b56b0518a6620641d39",
+                raw: 0,
+                updatedAtMs: 2688330,
+            },
+        },
+    }, 1767225600000)
+
+    assert.equal(samples.length, 4)
+    assert.deepEqual(
+        samples.map((sample) => sample.metric_type).sort(),
+        ["humidity", "no2", "noise_levels", "temperature"]
+    )
+    assert.ok(samples.every((sample) => sample.sensor_id === "dev_472584440bca1b56b0518a6620641d39"))
+    assert.ok(samples.every((sample) => sample.timestamp === 1767225600000))
+})
+
+test("firebase sync endpoint ingests mapped RTDB device data", async () => {
+    const deviceId = "dev_472584440bca1b56b0518a6620641d39"
+    const firebaseDb = createMockFirebaseDb({
+        [`devices/${deviceId}`]: {
+            no2: {
+                latest: {
+                    deviceId,
+                    firebaseUid: `device:${deviceId}`,
+                    raw: 3709,
+                    unit: "adc_raw",
+                    updatedAtMs: 2685761,
+                },
+            },
+            sht30: {
+                latest: {
+                    deviceId,
+                    firebaseUid: `device:${deviceId}`,
+                    humidityPct: 49.45144,
+                    temperatureC: 28.87732,
+                    updatedAtMs: 2690353,
+                },
+            },
+            sound: {
+                latest: {
+                    deviceId,
+                    firebaseUid: `device:${deviceId}`,
+                    raw: 0,
+                    unit: "adc_raw",
+                    updatedAtMs: 2688330,
+                },
+            },
+        },
+    })
+    const server = await createTestServer({ firebaseDb })
+
+    try {
+        const response = await fetch(`${server.baseUrl}/firebase/sync/${deviceId}`, {
+            method: "POST",
+        })
+
+        assert.equal(response.status, 200)
+        const body = await response.json()
+        assert.equal(body.status, "success")
+        assert.equal(body.accepted, 4)
+        assert.equal(body.rejected, 0)
+        assert.deepEqual(
+            body.samples.map((sample) => sample.metric_type).sort(),
+            ["humidity", "no2", "noise_levels", "temperature"]
+        )
+
+        const metricsResponse = await fetch(`${server.baseUrl}/iot/metrics`)
+        const metricsText = await metricsResponse.text()
+
+        assert.match(metricsText, new RegExp(`sensor_data_metric\\{sensor_id="${deviceId}",metric_type="temperature",source="firebase-rtdb",owner_uid="unknown",owner_email="unknown",device_name="${deviceId}"\\} 28\\.87732`))
+        assert.match(metricsText, new RegExp(`sensor_data_metric\\{sensor_id="${deviceId}",metric_type="humidity",source="firebase-rtdb",owner_uid="unknown",owner_email="unknown",device_name="${deviceId}"\\} 49\\.45144`))
+        assert.match(metricsText, new RegExp(`sensor_data_metric\\{sensor_id="${deviceId}",metric_type="no2",source="firebase-rtdb",owner_uid="unknown",owner_email="unknown",device_name="${deviceId}"\\} 3709`))
+        assert.match(metricsText, new RegExp(`sensor_data_metric\\{sensor_id="${deviceId}",metric_type="noise_levels",source="firebase-rtdb",owner_uid="unknown",owner_email="unknown",device_name="${deviceId}"\\} 0`))
+    } finally {
+        await server.close()
+    }
+})
+
+test("firebase sync endpoint enriches metrics with Supabase owner labels", async () => {
+    const deviceId = "dev_owned_node_1"
+    const ownerUid = "firebase-user-123"
+    const ownerEmail = "owner@example.com"
+    const firebaseDb = createMockFirebaseDb({
+        [`devices/${deviceId}`]: {
+            sht30: {
+                latest: {
+                    deviceId,
+                    temperatureC: 24.25,
+                    humidityPct: 44.5,
+                    updatedAtMs: 2690353,
+                },
+            },
+        },
+    })
+    const supabase = new MockSupabaseClient({
+        devices: [
+            {
+                device_id: deviceId,
+                owner_uid: ownerUid,
+                name: "Lab Greenhouse",
+            },
+        ],
+        users: [
+            {
+                id: "f1c296da-3919-4d0b-a7a0-6027f682fe8d",
+                email: ownerEmail,
+                firebase_uid: ownerUid,
+            },
+        ],
+    })
+    const server = await createTestServer({ firebaseDb, supabase })
+
+    try {
+        const response = await fetch(`${server.baseUrl}/firebase/sync/${deviceId}`, {
+            method: "POST",
+        })
+
+        assert.equal(response.status, 200)
+        const body = await response.json()
+        assert.equal(body.accepted, 2)
+        assert.equal(body.samples[0].owner_uid, ownerUid)
+        assert.equal(body.samples[0].owner_email, ownerEmail)
+        assert.equal(body.samples[0].device_name, "Lab Greenhouse")
+
+        const metricsResponse = await fetch(`${server.baseUrl}/iot/metrics`)
+        const metricsText = await metricsResponse.text()
+
+        assert.match(metricsText, new RegExp(`sensor_data_metric\\{sensor_id="${deviceId}",metric_type="temperature",source="firebase-rtdb",owner_uid="${ownerUid}",owner_email="${ownerEmail}",device_name="Lab Greenhouse"\\} 24\\.25`))
+        assert.match(metricsText, new RegExp(`esg_sensor_score\\{sensor_id="${deviceId}",owner_uid="${ownerUid}",owner_email="${ownerEmail}",device_name="Lab Greenhouse"\\} 100`))
+    } finally {
+        await server.close()
+    }
+})
+
+test("firebase sync endpoint only ingests devices owned by the requested ownerUid", async () => {
+    const ownerUid = "firebase-user-a"
+    const ownedDeviceId = "dev_owner_a_node"
+    const otherDeviceId = "dev_owner_b_node"
+    const firebaseDb = createMockFirebaseDb({
+        [`devices/${ownedDeviceId}`]: {
+            sht30: {
+                latest: {
+                    deviceId: ownedDeviceId,
+                    temperatureC: 23.5,
+                    humidityPct: 48.5,
+                    updatedAtMs: 1234,
+                },
+            },
+        },
+        [`devices/${otherDeviceId}`]: {
+            sht30: {
+                latest: {
+                    deviceId: otherDeviceId,
+                    temperatureC: 31.2,
+                    humidityPct: 65.2,
+                    updatedAtMs: 1234,
+                },
+            },
+        },
+    })
+    const supabase = new MockSupabaseClient({
+        users: [
+            {
+                id: "2f909e5f-d270-4879-a6ac-e04818a11234",
+                email: "owner-a@example.com",
+                firebase_uid: ownerUid,
+            },
+        ],
+        devices: [
+            {
+                device_id: ownedDeviceId,
+                owner_uid: ownerUid,
+                name: "Owner A Node",
+            },
+            {
+                device_id: otherDeviceId,
+                owner_uid: "firebase-user-b",
+                name: "Owner B Node",
+            },
+        ],
+    })
+    const server = await createTestServer({ firebaseDb, supabase })
+
+    try {
+        const response = await fetch(`${server.baseUrl}/firebase/sync`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ownerUid }),
+        })
+
+        assert.equal(response.status, 200)
+        const body = await response.json()
+
+        assert.equal(body.ownerUid, ownerUid)
+        assert.equal(body.deviceCount, 1)
+        assert.equal(body.accepted, 2)
+        assert.deepEqual(body.devices.map((device) => device.deviceId), [ownedDeviceId])
+        assert.ok(body.samples.every((sample) => sample.sensor_id === ownedDeviceId))
+
+        const metricsResponse = await fetch(`${server.baseUrl}/iot/metrics`)
+        const metricsText = await metricsResponse.text()
+
+        assert.match(
+            metricsText,
+            new RegExp(`sensor_data_metric\\{sensor_id="${ownedDeviceId}",metric_type="temperature",source="firebase-rtdb",owner_uid="${ownerUid}",owner_email="owner-a@example.com",device_name="Owner A Node"\\} 23\\.5`)
+        )
+        assert.doesNotMatch(metricsText, new RegExp(otherDeviceId))
     } finally {
         await server.close()
     }
