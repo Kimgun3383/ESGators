@@ -25,6 +25,7 @@ const DEFAULT_THRESHOLDS = {
     noise_levels: { min: 0, max: 75, warningMax: 90, criticalMax: 90, unit: "dba" },
 }
 const DEFAULT_FIREBASE_DEVICE_ROOT_PATH = "devices"
+const DEFAULT_FIREBASE_OWNER_SYNC_INTERVAL_MS = 1000
 const FIREBASE_TIMESTAMP_MIN_SECONDS = 946684800
 const FIREBASE_TIMESTAMP_MIN_MS = FIREBASE_TIMESTAMP_MIN_SECONDS * 1000
 const DEFAULT_DEVICE_OWNER_LABELS = {
@@ -272,6 +273,7 @@ function createApp(options = {}) {
         lastFirebaseSync: null,
         lastFirebaseError: null,
         lastFirebaseSamples: [],
+        firebaseOwnerSyncStatus: {},
         lastMwbeSync: null,
         lastMwbeError: null,
         lastMwbeSamples: [],
@@ -423,6 +425,9 @@ function createApp(options = {}) {
                 process.env.FIREBASE_DEVICE_ROOT_PATH || DEFAULT_FIREBASE_DEVICE_ROOT_PATH
             ).replace(/^\/+|\/+$/g, ""),
             source: String(process.env.FIREBASE_SOURCE_NAME || "firebase-rtdb"),
+            ownerSyncIntervalMs: Number(
+                process.env.FIREBASE_OWNER_SYNC_INTERVAL_MS || DEFAULT_FIREBASE_OWNER_SYNC_INTERVAL_MS
+            ),
         }
     }
 
@@ -1074,48 +1079,151 @@ function createApp(options = {}) {
         return response.data
     }
 
+    async function loadOwnerRecord(ownerUid) {
+        const normalizedOwnerUid = String(ownerUid || "").trim()
+
+        if (!normalizedOwnerUid || !supabase) {
+            return null
+        }
+
+        const ownerQuery = supabase
+            .from("users")
+            .select("id, email, name, firebase_uid")
+
+        const { data, error } = isUuid(normalizedOwnerUid)
+            ? await ownerQuery.eq("id", normalizedOwnerUid).maybeSingle()
+            : await ownerQuery.eq("firebase_uid", normalizedOwnerUid).maybeSingle()
+
+        if (error) {
+            throw new Error(`Failed to load owner user ${normalizedOwnerUid}: ${error.message}`)
+        }
+
+        return data || null
+    }
+
+    async function loadOwnedFirebaseDeviceIds(ownerUid) {
+        const normalizedOwnerUid = String(ownerUid || "").trim()
+
+        if (!normalizedOwnerUid) {
+            return []
+        }
+
+        if (!supabase) {
+            throw new Error("Supabase is not configured")
+        }
+
+        const owner = await loadOwnerRecord(normalizedOwnerUid)
+        const ownerKeys = [...new Set([
+            normalizedOwnerUid,
+            owner?.id,
+            owner?.firebase_uid,
+        ].filter(Boolean))]
+
+        const { data, error } = await supabase
+            .from("devices")
+            .select("device_id")
+            .in("owner_uid", ownerKeys)
+
+        if (error) {
+            throw new Error(`Failed to load devices for owner ${normalizedOwnerUid}: ${error.message}`)
+        }
+
+        return [...new Set(
+            (data || [])
+                .map((device) => String(device?.device_id || "").trim())
+                .filter(Boolean)
+        )]
+    }
+
+    async function syncFirebaseDevicesByIds(deviceIds, config, options = {}) {
+        const now = Date.now()
+        const uniqueDeviceIds = [...new Set(
+            (deviceIds || [])
+                .map((deviceId) => String(deviceId || "").trim())
+                .filter(Boolean)
+        )]
+
+        const devicePayloads = await Promise.all(
+            uniqueDeviceIds.map(async (deviceId) => ({
+                deviceId,
+                path: joinFirebasePath(config.deviceRootPath, deviceId),
+                payload: await readFirebaseValue(joinFirebasePath(config.deviceRootPath, deviceId)),
+            }))
+        )
+
+        const normalizedDevices = devicePayloads.map((devicePayload) => ({
+            deviceId: devicePayload.deviceId,
+            path: devicePayload.path,
+            samples: devicePayload.payload
+                ? normalizeFirebaseDevicePayload(devicePayload.deviceId, devicePayload.payload, now)
+                : [],
+        }))
+
+        const samples = normalizedDevices.flatMap((device) => device.samples)
+        const result = samples.length > 0
+            ? await ingestSamples(samples, config.source)
+            : {
+                accepted: [],
+                rejected: [],
+                pushResult: {
+                    pushed: 0,
+                    skipped: true,
+                    reason: uniqueDeviceIds.length > 0 ? "no_valid_samples" : "no_owned_devices",
+                },
+            }
+
+        state.lastFirebaseError = null
+        state.lastFirebaseSamples = result.accepted
+        state.lastFirebaseSync = {
+            ownerUid: options.ownerUid || null,
+            deviceCount: normalizedDevices.length,
+            accepted: result.accepted.length,
+            rejected: result.rejected.length,
+            path: options.path || config.deviceRootPath,
+            source: config.source,
+            syncedAt: Date.now(),
+            pushResult: result.pushResult,
+        }
+
+        if (options.ownerUid) {
+            state.firebaseOwnerSyncStatus[options.ownerUid] = state.lastFirebaseSync
+        }
+
+        return {
+            ...state.lastFirebaseSync,
+            devices: normalizedDevices.map((device) => ({
+                deviceId: device.deviceId,
+                path: device.path,
+                sampleCount: device.samples.length,
+            })),
+            samples: result.accepted,
+            rejectedSamples: result.rejected,
+            pushResult: result.pushResult,
+        }
+    }
+
     async function syncFirebaseData(options = {}) {
         const config = getFirebaseConfig()
         if (!firebaseDb && !config.databaseUrl) {
             throw new Error("Firebase is disabled")
         }
 
-        const requestedDeviceId = String(options.deviceId || "").trim()
         const now = Date.now()
+        const requestedOwnerUid = String(options.ownerUid || "").trim()
+        const requestedDeviceId = String(options.deviceId || "").trim()
+
+        if (requestedOwnerUid) {
+            const ownedDeviceIds = await loadOwnedFirebaseDeviceIds(requestedOwnerUid)
+            return syncFirebaseDevicesByIds(ownedDeviceIds, config, {
+                ownerUid: requestedOwnerUid,
+                path: joinFirebasePath(config.deviceRootPath, `{owner:${requestedOwnerUid}}`),
+            })
+        }
 
         if (requestedDeviceId) {
-            const pathToRead = joinFirebasePath(config.deviceRootPath, requestedDeviceId)
-            const payload = await readFirebaseValue(pathToRead)
-
-            if (!payload) {
-                throw new Error(`No Firebase data found at ${pathToRead}`)
-            }
-
-            const samples = normalizeFirebaseDevicePayload(requestedDeviceId, payload, now)
-
-            if (samples.length === 0) {
-                throw new Error(`No supported sensor values found for ${requestedDeviceId}`)
-            }
-
-            const result = await ingestSamples(samples, config.source)
-
-            state.lastFirebaseError = null
-            state.lastFirebaseSamples = result.accepted
-            state.lastFirebaseSync = {
-                deviceCount: 1,
-                accepted: result.accepted.length,
-                rejected: result.rejected.length,
-                path: pathToRead,
-                source: config.source,
-                syncedAt: Date.now(),
-            }
-
-            return {
-                ...state.lastFirebaseSync,
-                samples: result.accepted,
-                rejectedSamples: result.rejected,
-                pushResult: result.pushResult,
-            }
+            return syncFirebaseDevicesByIds([requestedDeviceId], config, {
+                path: joinFirebasePath(config.deviceRootPath, requestedDeviceId),
+            })
         }
 
         const pathToRead = config.deviceRootPath
@@ -1242,6 +1350,7 @@ function createApp(options = {}) {
             lastFirebaseSync: state.lastFirebaseSync,
             lastFirebaseError: state.lastFirebaseError,
             recentSamples: state.lastFirebaseSamples,
+            ownerSyncStatus: state.firebaseOwnerSyncStatus,
         })
     })
 
@@ -1355,8 +1464,9 @@ function createApp(options = {}) {
 
     app.post("/firebase/sync", async (req, res) => {
         try {
+            const ownerUid = String(req.body?.ownerUid || req.query.ownerUid || "").trim()
             const deviceId = String(req.body?.deviceId || req.query.deviceId || "").trim()
-            const result = await syncFirebaseData({ deviceId })
+            const result = await syncFirebaseData({ ownerUid, deviceId })
 
             res.json({
                 status: "success",

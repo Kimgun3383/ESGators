@@ -36,14 +36,25 @@ class MockSupabaseQuery {
     constructor(rows) {
         this.rows = rows
         this.filters = []
+        this.singleRowMode = false
     }
 
     select() {
         return this
     }
 
+    eq(column, value) {
+        this.filters.push({ column, values: [value] })
+        return this
+    }
+
     in(column, values) {
         this.filters.push({ column, values })
+        return this
+    }
+
+    maybeSingle() {
+        this.singleRowMode = true
         return this
     }
 
@@ -54,7 +65,11 @@ class MockSupabaseQuery {
             data = data.filter((row) => filter.values.includes(row[filter.column]))
         })
 
-        return Promise.resolve({ data, error: null }).then(resolve, reject)
+        const result = this.singleRowMode
+            ? { data: data[0] || null, error: null }
+            : { data, error: null }
+
+        return Promise.resolve(result).then(resolve, reject)
     }
 }
 
@@ -336,6 +351,84 @@ test("firebase sync endpoint enriches metrics with Supabase owner labels", async
 
         assert.match(metricsText, new RegExp(`sensor_data_metric\\{sensor_id="${deviceId}",metric_type="temperature",source="firebase-rtdb",owner_uid="${ownerUid}",owner_email="${ownerEmail}",device_name="Lab Greenhouse"\\} 24\\.25`))
         assert.match(metricsText, new RegExp(`esg_sensor_score\\{sensor_id="${deviceId}",owner_uid="${ownerUid}",owner_email="${ownerEmail}",device_name="Lab Greenhouse"\\} 100`))
+    } finally {
+        await server.close()
+    }
+})
+
+test("firebase sync endpoint only ingests devices owned by the requested ownerUid", async () => {
+    const ownerUid = "firebase-user-a"
+    const ownedDeviceId = "dev_owner_a_node"
+    const otherDeviceId = "dev_owner_b_node"
+    const firebaseDb = createMockFirebaseDb({
+        [`devices/${ownedDeviceId}`]: {
+            sht30: {
+                latest: {
+                    deviceId: ownedDeviceId,
+                    temperatureC: 23.5,
+                    humidityPct: 48.5,
+                    updatedAtMs: 1234,
+                },
+            },
+        },
+        [`devices/${otherDeviceId}`]: {
+            sht30: {
+                latest: {
+                    deviceId: otherDeviceId,
+                    temperatureC: 31.2,
+                    humidityPct: 65.2,
+                    updatedAtMs: 1234,
+                },
+            },
+        },
+    })
+    const supabase = new MockSupabaseClient({
+        users: [
+            {
+                id: "2f909e5f-d270-4879-a6ac-e04818a11234",
+                email: "owner-a@example.com",
+                firebase_uid: ownerUid,
+            },
+        ],
+        devices: [
+            {
+                device_id: ownedDeviceId,
+                owner_uid: ownerUid,
+                name: "Owner A Node",
+            },
+            {
+                device_id: otherDeviceId,
+                owner_uid: "firebase-user-b",
+                name: "Owner B Node",
+            },
+        ],
+    })
+    const server = await createTestServer({ firebaseDb, supabase })
+
+    try {
+        const response = await fetch(`${server.baseUrl}/firebase/sync`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ownerUid }),
+        })
+
+        assert.equal(response.status, 200)
+        const body = await response.json()
+
+        assert.equal(body.ownerUid, ownerUid)
+        assert.equal(body.deviceCount, 1)
+        assert.equal(body.accepted, 2)
+        assert.deepEqual(body.devices.map((device) => device.deviceId), [ownedDeviceId])
+        assert.ok(body.samples.every((sample) => sample.sensor_id === ownedDeviceId))
+
+        const metricsResponse = await fetch(`${server.baseUrl}/iot/metrics`)
+        const metricsText = await metricsResponse.text()
+
+        assert.match(
+            metricsText,
+            new RegExp(`sensor_data_metric\\{sensor_id="${ownedDeviceId}",metric_type="temperature",source="firebase-rtdb",owner_uid="${ownerUid}",owner_email="owner-a@example.com",device_name="Owner A Node"\\} 23\\.5`)
+        )
+        assert.doesNotMatch(metricsText, new RegExp(otherDeviceId))
     } finally {
         await server.close()
     }
