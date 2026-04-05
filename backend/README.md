@@ -45,9 +45,18 @@ Optional MWBE sync config:
 Optional Firebase RTDB sync config:
 - `FIREBASE_SERVICE_ACCOUNT_JSON`
 - `FIREBASE_DATABASE_URL`
+- `FIREBASE_PROJECT_ID`
 - `VITE_FIREBASE_PROJECT_ID`
 - `FIREBASE_DEVICE_ROOT_PATH`
 - `FIREBASE_SOURCE_NAME`
+- `FIREBASE_SYNC_INTERVAL_MS`
+- `FIREBASE_SYNC_ON_START`
+
+If no Firebase env vars are set, the backend falls back to:
+- project id `senior-project-esgators`
+- RTDB URL `https://senior-project-esgators-default-rtdb.firebaseio.com`
+- startup sync enabled
+- 1 second polling interval
 
 Optional threshold override:
 - `SENSOR_THRESHOLDS_JSON`

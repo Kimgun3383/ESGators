@@ -24,7 +24,10 @@ const DEFAULT_THRESHOLDS = {
     humidity: { min: 30, max: 60, criticalMin: 30, warningMax: 80, criticalMax: 80, unit: "percent" },
     noise_levels: { min: 0, max: 75, warningMax: 90, criticalMax: 90, unit: "dba" },
 }
+const DEFAULT_FIREBASE_PROJECT_ID = "senior-project-esgators"
+const DEFAULT_FIREBASE_DATABASE_URL = `https://${DEFAULT_FIREBASE_PROJECT_ID}-default-rtdb.firebaseio.com`
 const DEFAULT_FIREBASE_DEVICE_ROOT_PATH = "devices"
+const DEFAULT_FIREBASE_SYNC_INTERVAL_MS = 1000
 const DEFAULT_FIREBASE_OWNER_SYNC_INTERVAL_MS = 1000
 const FIREBASE_TIMESTAMP_MIN_SECONDS = 946684800
 const FIREBASE_TIMESTAMP_MIN_MS = FIREBASE_TIMESTAMP_MIN_SECONDS * 1000
@@ -287,6 +290,7 @@ function createApp(options = {}) {
     }
 
     let mwbePollTimer = null
+    let firebasePollTimer = null
 
     const sensorDataMetric = new promClient.Gauge({
         name: "sensor_data_metric",
@@ -409,22 +413,28 @@ function createApp(options = {}) {
     }
 
     function getFirebaseConfig() {
+        const projectId = String(
+            process.env.FIREBASE_PROJECT_ID
+            || process.env.VITE_FIREBASE_PROJECT_ID
+            || DEFAULT_FIREBASE_PROJECT_ID
+        ).trim()
         const databaseUrl = String(
             process.env.FIREBASE_DATABASE_URL
             || process.env.VITE_FIREBASE_DATABASE_URL
-            || (
-                process.env.VITE_FIREBASE_PROJECT_ID
-                    ? `https://${process.env.VITE_FIREBASE_PROJECT_ID}-default-rtdb.firebaseio.com`
-                    : ""
-            )
+            || (projectId ? `https://${projectId}-default-rtdb.firebaseio.com` : DEFAULT_FIREBASE_DATABASE_URL)
         ).replace(/\/$/, "")
 
         return {
+            projectId,
             databaseUrl,
             deviceRootPath: String(
                 process.env.FIREBASE_DEVICE_ROOT_PATH || DEFAULT_FIREBASE_DEVICE_ROOT_PATH
             ).replace(/^\/+|\/+$/g, ""),
             source: String(process.env.FIREBASE_SOURCE_NAME || "firebase-rtdb"),
+            syncIntervalMs: Number(
+                process.env.FIREBASE_SYNC_INTERVAL_MS || DEFAULT_FIREBASE_SYNC_INTERVAL_MS
+            ),
+            syncOnStart: parseBoolean(process.env.FIREBASE_SYNC_ON_START, true),
             ownerSyncIntervalMs: Number(
                 process.env.FIREBASE_OWNER_SYNC_INTERVAL_MS || DEFAULT_FIREBASE_OWNER_SYNC_INTERVAL_MS
             ),
@@ -1306,10 +1316,54 @@ function createApp(options = {}) {
         }
     }
 
+    function scheduleFirebasePolling() {
+        const config = getFirebaseConfig()
+
+        if (!firebaseDb && !config.databaseUrl) {
+            console.log("Firebase polling disabled: Firebase is not configured")
+            return
+        }
+
+        if (config.syncOnStart) {
+            syncFirebaseData()
+                .then((result) => {
+                    console.log(`Initial Firebase sync completed: accepted=${result.accepted} rejected=${result.rejected}`)
+                })
+                .catch((error) => {
+                    state.lastFirebaseError = error.message
+                    console.error(`Initial Firebase sync failed: ${error.message}`)
+                })
+        }
+
+        if (!Number.isFinite(config.syncIntervalMs) || config.syncIntervalMs <= 0) {
+            console.log("Firebase polling disabled: FIREBASE_SYNC_INTERVAL_MS <= 0")
+            return
+        }
+
+        firebasePollTimer = setInterval(async () => {
+            try {
+                const result = await syncFirebaseData()
+                console.log(`Firebase sync completed: accepted=${result.accepted} rejected=${result.rejected}`)
+            } catch (error) {
+                state.lastFirebaseError = error.message
+                console.error(`Firebase sync failed: ${error.message}`)
+            }
+        }, config.syncIntervalMs)
+
+        if (typeof firebasePollTimer.unref === "function") {
+            firebasePollTimer.unref()
+        }
+    }
+
     function stopPolling() {
         if (mwbePollTimer) {
             clearInterval(mwbePollTimer)
             mwbePollTimer = null
+        }
+
+        if (firebasePollTimer) {
+            clearInterval(firebasePollTimer)
+            firebasePollTimer = null
         }
     }
 
@@ -1628,6 +1682,7 @@ function createApp(options = {}) {
             ingestSamples,
             syncFirebaseData,
             syncMwbeData,
+            scheduleFirebasePolling,
             scheduleMwbePolling,
             stopPolling,
         },
@@ -1644,6 +1699,7 @@ function startServer(options = {}) {
     const server = runtime.app.listen(port, () => {
         console.log(`Server running on port ${port}`)
         if (enablePolling) {
+            runtime.helpers.scheduleFirebasePolling()
             runtime.helpers.scheduleMwbePolling()
         }
     })
@@ -1665,6 +1721,8 @@ function startServer(options = {}) {
 }
 
 module.exports = {
+    DEFAULT_FIREBASE_DATABASE_URL,
+    DEFAULT_FIREBASE_PROJECT_ID,
     DEFAULT_FIREBASE_DEVICE_ROOT_PATH,
     METRIC_TYPES,
     normalizeFirebaseDevicePayload,

@@ -1,7 +1,11 @@
 const test = require("node:test")
 const assert = require("node:assert/strict")
 
-const { normalizeFirebaseDevicePayload, startServer } = require("../app")
+const {
+    DEFAULT_FIREBASE_DATABASE_URL,
+    normalizeFirebaseDevicePayload,
+    startServer,
+} = require("../app")
 
 delete process.env.GRAFANA_USERNAME
 delete process.env.GRAFANA_API_KEY
@@ -170,6 +174,23 @@ test("metrics endpoint exposes Prometheus-formatted sensor and ESG values", asyn
         assert.match(metricsText, /sensor_data_anomaly_flag\{sensor_id="sensor-prom",metric_type="temperature",source="test-suite",owner_uid="unknown",owner_email="unknown",device_name="sensor-prom",severity="warning"\} 1/)
         assert.match(metricsText, /esg_environment_score\{scope="overall"\} 71\.43/)
         assert.match(metricsText, /esg_buffer_size 1/)
+    } finally {
+        await server.close()
+    }
+})
+
+test("firebase status exposes a usable default database URL", async () => {
+    const server = await createTestServer({ firebaseDb: null })
+
+    try {
+        const response = await fetch(`${server.baseUrl}/firebase/status`)
+        assert.equal(response.status, 200)
+
+        const body = await response.json()
+        assert.equal(body.config.databaseUrl, DEFAULT_FIREBASE_DATABASE_URL)
+        assert.equal(body.config.projectId, "senior-project-esgators")
+        assert.equal(body.config.syncIntervalMs, 1000)
+        assert.equal(body.config.syncOnStart, true)
     } finally {
         await server.close()
     }
