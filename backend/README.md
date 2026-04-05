@@ -49,6 +49,7 @@ Optional Firebase RTDB sync config:
 - `VITE_FIREBASE_PROJECT_ID`
 - `FIREBASE_DEVICE_ROOT_PATH`
 - `FIREBASE_SOURCE_NAME`
+- `FIREBASE_SYNC_DEVICE_IDS`
 - `FIREBASE_SYNC_INTERVAL_MS`
 - `FIREBASE_SYNC_ON_START`
 
@@ -56,7 +57,11 @@ If no Firebase env vars are set, the backend falls back to:
 - project id `senior-project-esgators`
 - RTDB URL `https://senior-project-esgators-default-rtdb.firebaseio.com`
 - startup sync enabled
-- 1 second polling interval
+- 5 second polling interval
+
+Firebase sync notes:
+- if `devices.json` is denied, the backend falls back to per-device reads via `FIREBASE_SYNC_DEVICE_IDS` or the Supabase `devices` table
+- unchanged Firebase values are skipped so Prometheus is only updated when a metric changes
 
 Optional threshold override:
 - `SENSOR_THRESHOLDS_JSON`

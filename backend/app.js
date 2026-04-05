@@ -27,7 +27,7 @@ const DEFAULT_THRESHOLDS = {
 const DEFAULT_FIREBASE_PROJECT_ID = "senior-project-esgators"
 const DEFAULT_FIREBASE_DATABASE_URL = `https://${DEFAULT_FIREBASE_PROJECT_ID}-default-rtdb.firebaseio.com`
 const DEFAULT_FIREBASE_DEVICE_ROOT_PATH = "devices"
-const DEFAULT_FIREBASE_SYNC_INTERVAL_MS = 1000
+const DEFAULT_FIREBASE_SYNC_INTERVAL_MS = 5000
 const DEFAULT_FIREBASE_OWNER_SYNC_INTERVAL_MS = 1000
 const FIREBASE_TIMESTAMP_MIN_SECONDS = 946684800
 const FIREBASE_TIMESTAMP_MIN_MS = FIREBASE_TIMESTAMP_MIN_SECONDS * 1000
@@ -256,6 +256,34 @@ function isUuid(value) {
     )
 }
 
+function isFirebasePermissionError(error) {
+    const status = Number(error?.response?.status)
+    const message = String(error?.message || "")
+    const detail = String(error?.response?.data?.error || "")
+
+    return status === 401
+        || status === 403
+        || message.includes("status code 401")
+        || message.includes("status code 403")
+        || detail.toLowerCase().includes("permission denied")
+}
+
+function createFirebaseSeriesKey(sample, source) {
+    return `${sample.sensor_id}:${sample.metric_type}:${source}`
+}
+
+function normalizeFirebaseDedupValue(metricType, numericValue) {
+    if (!Number.isFinite(Number(numericValue))) {
+        return "nan"
+    }
+
+    if (metricType === "temperature" || metricType === "humidity") {
+        return Number(numericValue).toFixed(2)
+    }
+
+    return Number(numericValue).toFixed(0)
+}
+
 function normalizeDeviceOwnerLabels(metadata = {}) {
     return {
         owner_uid: String(metadata.owner_uid || DEFAULT_DEVICE_OWNER_LABELS.owner_uid).trim()
@@ -277,6 +305,7 @@ function createApp(options = {}) {
         lastFirebaseError: null,
         lastFirebaseSamples: [],
         firebaseOwnerSyncStatus: {},
+        firebaseSeriesCache: {},
         lastMwbeSync: null,
         lastMwbeError: null,
         lastMwbeSamples: [],
@@ -730,8 +759,9 @@ function createApp(options = {}) {
             return { pushed: 0, skipped: true, reason: "missing_remote_write_config" }
         }
 
-        const metricsJson = await registry.getMetricsAsJSON()
-        const timeseries = normalizeSamples(metricsJson).concat(extraTimeSeries)
+        const timeseries = extraTimeSeries.length > 0
+            ? extraTimeSeries
+            : normalizeSamples(await registry.getMetricsAsJSON())
 
         if (timeseries.length === 0) {
             return { pushed: 0, skipped: true, reason: "empty_timeseries" }
@@ -1145,6 +1175,61 @@ function createApp(options = {}) {
         )]
     }
 
+    async function loadKnownFirebaseDeviceIds() {
+        const envDeviceIds = String(process.env.FIREBASE_SYNC_DEVICE_IDS || "")
+            .split(",")
+            .map((deviceId) => deviceId.trim())
+            .filter(Boolean)
+
+        if (envDeviceIds.length > 0) {
+            return [...new Set(envDeviceIds)]
+        }
+
+        if (!supabase) {
+            return []
+        }
+
+        const { data, error } = await supabase
+            .from("devices")
+            .select("device_id")
+
+        if (error) {
+            throw new Error(`Failed to load known Firebase devices: ${error.message}`)
+        }
+
+        return [...new Set(
+            (data || [])
+                .map((device) => String(device?.device_id || "").trim())
+                .filter(Boolean)
+        )]
+    }
+
+    function filterChangedFirebaseSamples(samples, source) {
+        const changedSamples = []
+        let skippedUnchanged = 0
+        const nextFingerprints = []
+
+        ;(samples || []).forEach((sample) => {
+            const seriesKey = createFirebaseSeriesKey(sample, source)
+            const fingerprint = normalizeFirebaseDedupValue(sample.metric_type, sample.value)
+            const previousFingerprint = state.firebaseSeriesCache[seriesKey]
+
+            if (previousFingerprint === fingerprint) {
+                skippedUnchanged += 1
+                return
+            }
+
+            changedSamples.push(sample)
+            nextFingerprints.push({ seriesKey, fingerprint })
+        })
+
+        return {
+            changedSamples,
+            nextFingerprints,
+            skippedUnchanged,
+        }
+    }
+
     async function syncFirebaseDevicesByIds(deviceIds, config, options = {}) {
         const now = Date.now()
         const uniqueDeviceIds = [...new Set(
@@ -1170,17 +1255,28 @@ function createApp(options = {}) {
         }))
 
         const samples = normalizedDevices.flatMap((device) => device.samples)
-        const result = samples.length > 0
-            ? await ingestSamples(samples, config.source)
+        const {
+            changedSamples,
+            nextFingerprints,
+            skippedUnchanged,
+        } = filterChangedFirebaseSamples(samples, config.source)
+        const result = changedSamples.length > 0
+            ? await ingestSamples(changedSamples, config.source)
             : {
                 accepted: [],
                 rejected: [],
                 pushResult: {
                     pushed: 0,
                     skipped: true,
-                    reason: uniqueDeviceIds.length > 0 ? "no_valid_samples" : "no_owned_devices",
+                    reason: uniqueDeviceIds.length > 0
+                        ? (samples.length > 0 ? "no_changed_samples" : "no_valid_samples")
+                        : "no_owned_devices",
                 },
             }
+
+        nextFingerprints.forEach(({ seriesKey, fingerprint }) => {
+            state.firebaseSeriesCache[seriesKey] = fingerprint
+        })
 
         state.lastFirebaseError = null
         state.lastFirebaseSamples = result.accepted
@@ -1193,6 +1289,7 @@ function createApp(options = {}) {
             source: config.source,
             syncedAt: Date.now(),
             pushResult: result.pushResult,
+            skippedUnchanged,
         }
 
         if (options.ownerUid) {
@@ -1237,7 +1334,24 @@ function createApp(options = {}) {
         }
 
         const pathToRead = config.deviceRootPath
-        const devices = await readFirebaseValue(pathToRead)
+        let devices
+
+        try {
+            devices = await readFirebaseValue(pathToRead)
+        } catch (error) {
+            if (!isFirebasePermissionError(error)) {
+                throw error
+            }
+
+            const knownDeviceIds = await loadKnownFirebaseDeviceIds()
+            if (knownDeviceIds.length === 0) {
+                throw error
+            }
+
+            return syncFirebaseDevicesByIds(knownDeviceIds, config, {
+                path: joinFirebasePath(config.deviceRootPath, "{known_devices}"),
+            })
+        }
 
         if (!devices || typeof devices !== "object") {
             throw new Error(`No Firebase data found at ${pathToRead}`)
@@ -1254,7 +1368,26 @@ function createApp(options = {}) {
             throw new Error(`No supported sensor values found under ${pathToRead}`)
         }
 
-        const result = await ingestSamples(samples, config.source)
+        const {
+            changedSamples,
+            nextFingerprints,
+            skippedUnchanged,
+        } = filterChangedFirebaseSamples(samples, config.source)
+        const result = changedSamples.length > 0
+            ? await ingestSamples(changedSamples, config.source)
+            : {
+                accepted: [],
+                rejected: [],
+                pushResult: {
+                    pushed: 0,
+                    skipped: true,
+                    reason: "no_changed_samples",
+                },
+            }
+
+        nextFingerprints.forEach(({ seriesKey, fingerprint }) => {
+            state.firebaseSeriesCache[seriesKey] = fingerprint
+        })
 
         state.lastFirebaseError = null
         state.lastFirebaseSamples = result.accepted
@@ -1265,6 +1398,8 @@ function createApp(options = {}) {
             path: pathToRead,
             source: config.source,
             syncedAt: Date.now(),
+            pushResult: result.pushResult,
+            skippedUnchanged,
         }
 
         return {
