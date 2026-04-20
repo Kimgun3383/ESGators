@@ -108,6 +108,14 @@ function normalizeLookupKey(value) {
     .replace(/[^a-z0-9]+/g, "")
 }
 
+function fingerprintTelemetry(value) {
+  try {
+    return JSON.stringify(value ?? null)
+  } catch {
+    return ""
+  }
+}
+
 function collectUpdatedAtValues(value, acc = [], seen = new Set()) {
   if (!value || typeof value !== "object") {
     return acc
@@ -246,17 +254,7 @@ function pickSensorValue(payload, aliases, preferredParents = []) {
   return bestValue
 }
 
-function hasSensorReadings(telemetry) {
-  return [
-    telemetry?.temperatureC,
-    telemetry?.humidityPct,
-    telemetry?.no2,
-    telemetry?.soundLevel,
-    telemetry?.particulateMatterLevel,
-  ].some((value) => Number.isFinite(value))
-}
-
-function normalizeNodeTelemetry(telemetry, receivedAtMs = Date.now()) {
+function normalizeNodeTelemetry(telemetry) {
   if (!telemetry || typeof telemetry !== "object") {
     return null
   }
@@ -285,10 +283,7 @@ function normalizeNodeTelemetry(telemetry, receivedAtMs = Date.now()) {
   }
 
   const derivedUpdatedAtMs = deriveUpdatedAtMs(telemetry)
-  normalizedTelemetry.updatedAtMs =
-    derivedUpdatedAtMs !== null
-      ? derivedUpdatedAtMs
-      : (hasSensorReadings(normalizedTelemetry) ? receivedAtMs : null)
+  normalizedTelemetry.updatedAtMs = derivedUpdatedAtMs
 
   return normalizedTelemetry
 }
@@ -437,6 +432,8 @@ function useOwnedNodes(user) {
         (snapshot) => {
           const rawTelemetry = snapshot.val()
           const telemetry = normalizeNodeTelemetry(rawTelemetry)
+          const nextTelemetryFingerprint = fingerprintTelemetry(rawTelemetry)
+          const receivedAtMs = Date.now()
 
           setWarning("")
 
@@ -446,12 +443,19 @@ function useOwnedNodes(user) {
                 return currentNode
               }
 
+              const previousTelemetryFingerprint = fingerprintTelemetry(currentNode.rawTelemetry)
+              const hasPreviousTelemetry = previousTelemetryFingerprint !== "null" && previousTelemetryFingerprint !== ""
+              const telemetryChanged = previousTelemetryFingerprint !== nextTelemetryFingerprint
+              const fallbackUpdatedAtMs =
+                telemetry?.updatedAtMs
+                ?? (hasPreviousTelemetry && telemetryChanged ? receivedAtMs : currentNode.updatedAtMs ?? null)
+
               return {
                 ...currentNode,
                 rawTelemetry,
                 telemetry,
                 status: deriveNodeStatus(telemetry, currentNode.status),
-                updatedAtMs: telemetry?.updatedAtMs ?? null,
+                updatedAtMs: fallbackUpdatedAtMs,
               }
             })
           )

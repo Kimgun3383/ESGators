@@ -10,3 +10,5 @@ backend/kalshiPrivate.txt
 .history/
 frontend/.history/
 mwbe/.history/
+.codex
+.editorconfig
